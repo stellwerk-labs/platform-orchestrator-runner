@@ -1,0 +1,20 @@
+# Config used for generating the API models and server stubs based on the openapi/spec.yaml
+package: platformorchestratorcp
+generate:
+  models: true
+  client: true
+  echo-server: false
+output-options:
+  include-operation-ids:
+    - createInternalOrganization
+    - createResourceType
+    - createModule
+    - createModuleRuleInOrg
+    - createModuleProvider
+    - createProject
+    - createEnvironment
+    - createEnvironmentType
+    - createRunner
+    - createRunnerRuleInOrg
+    - createModuleProvider
+output: client.gen.go

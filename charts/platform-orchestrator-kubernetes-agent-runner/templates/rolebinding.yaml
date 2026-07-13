@@ -1,0 +1,17 @@
+{{- if and .Values.serviceAccount.create .Values.rbac.create }}
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.deploymentJobNamespace" . | quote }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+    namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+{{- end }}

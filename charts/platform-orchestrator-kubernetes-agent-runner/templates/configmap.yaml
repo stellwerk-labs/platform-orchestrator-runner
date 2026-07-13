@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+data:
+  ORG_ID: {{ .Values.platformOrchestrator.orgId | quote }}
+  RUNNER_ID: {{ .Values.platformOrchestrator.runnerId | quote }}
+  LOG_LEVEL: {{ .Values.platformOrchestrator.logLevel | quote }}

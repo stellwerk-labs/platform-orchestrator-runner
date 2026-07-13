@@ -1,0 +1,75 @@
+KUBECONFIG := runner-cluster/kubeconfig.yaml
+KUBECONFIG_INTERNAL := runner-cluster/kubeconfig_internal.yaml
+KUBECTL := kubectl --kubeconfig $(KUBECONFIG)
+KUBECTL_INTERNAL := kubectl --kubeconfig $(KUBECONFIG_INTERNAL)
+CLUSTER_NAME := kind-runner
+NAME := runner
+DEFAULT_K8S_RES := platform-orchestrator-runner
+RUNNER_CONFIGURATION := runner_config.json
+
+compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml
+	score-compose check-version '>=0.16.0'
+	score-compose init --no-sample
+	cp score.provisioners.yaml .score-compose/
+	score-compose generate ./score.dp.yaml
+	score-compose generate ./score.cp.yaml
+	score-compose generate ./score.iam.yaml
+	score-compose generate --publish 5432:postgres.default#platform-orchestrator-dp.postgres.host:5432 --publish 8081:platform-orchestrator-cp:8080 --publish 8082:platform-orchestrator-dp:8080 --publish 8083:platform-orchestrator-iam:8080
+	yq eval-all '. as $$item ireduce ({}; . * $$item)' --inplace compose.yaml compose-mixins.yaml
+
+.PHONY: build-platform-orchestrator-runner
+build-platform-orchestrator-runner:
+	docker build -t stellwerk-labs/platform-orchestrator-runner ../.
+	docker tag stellwerk-labs/platform-orchestrator-runner stellwerk-labs/platform-orchestrator-runner:test
+	
+.PHONY: build
+build: compose.yaml build-platform-orchestrator-runner
+	docker compose build --pull
+
+.PHONY: test
+test:
+	docker compose up --no-build -d platform-orchestrator-cp-platform-orchestrator-cp platform-orchestrator-dp-platform-orchestrator-dp --wait
+	docker network connect integration-tests_default runner-control-plane || true
+	SERVER_URL="http://$(shell score-compose resources get-outputs dns.default\#api-dns | jq -r .host):8080" INTERNAL_CP_URL=http://localhost:8081 DB_CONNECTION_STRING="$(shell score-compose resources get-outputs 'postgres.default#platform-orchestrator-dp.postgres' -f 'host=localhost port=5432 dbname={{ .name }} user={{ .username }} password={{ .password }} connect_timeout=5 sslmode=disable')" RUNNER_TOKEN_SALT="vnXd0Ses8L1X0TGGcp+mf/V8dQs+L4/fWvijORwb7lI=" go tool gotestsum --format testname ./ -test.timeout 10m -test.parallel=2 -test.v $(TESTARGS)
+
+.PHONY: prepare-tests
+prepare-tests: build create-cluster write-cluster-config configure-cluster
+
+## create a test cluster
+.PHONY: create-cluster
+create-cluster:
+	kind create cluster --name $(NAME) --wait 5m --kubeconfig $(KUBECONFIG)
+
+
+## create kubeconfig to access runner cluster
+.PHONY: write-cluster-config
+write-cluster-config:
+	kind export kubeconfig --name $(NAME) --kubeconfig $(KUBECONFIG)
+	kind export kubeconfig --name $(NAME) --internal --kubeconfig $(KUBECONFIG_INTERNAL)
+
+.PHONY: generate-auth-keys
+generate-auth-keys:
+	openssl genpkey -algorithm ed25519 -out runner-keys/private_key.pem
+	openssl pkey -in runner-keys/private_key.pem -pubout -out runner-keys/public_key.pem
+
+.PHONY: configure-cluster
+configure-cluster: generate-auth-keys
+	$(KUBECTL) delete namespace $(DEFAULT_K8S_RES) --ignore-not-found
+	$(KUBECTL) create namespace $(DEFAULT_K8S_RES)
+	$(KUBECTL) create secret generic private-key-secret --from-file=runner-keys/private_key.pem --namespace=${DEFAULT_K8S_RES}
+	$(KUBECTL) apply -f runner-cluster/config -R
+	echo "$${RUNNER_GIT_SSH_KEYS}" | $(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) runner-git-ssh-keys --from-file=key=/dev/stdin || true
+	$(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) aws-creds --from-literal=access_key_id="FAKE_ACCESS_KEY_ID" --from-literal=secret_access_key="SECRET_ACCESS_KEY"
+	@printf '{"cluster_data":{"certificate_authority_data": "%s", "server": "%s"},"auth":{"client_certificate_data": "%s", "client_key_data": "%s"}}\n' "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.certificate-authority-data}' --raw )" "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.server}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-certificate-data}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-key-data}' --raw )" > $(RUNNER_CONFIGURATION)
+	kind load docker-image --name ${NAME} stellwerk-labs/platform-orchestrator-runner:test
+
+.PHONY: clean
+clean:
+	if [ -f compose.yaml ]; then docker compose down -v --remove-orphans; fi
+	rm -rfv .score-compose compose.yaml
+	rm -rfv ./runner-keys/private_key.pem ./runner-keys/public_key.pem
+	kind delete cluster --name $(NAME) --kubeconfig $(KUBECONFIG)
+
+.PHONY: test-integration-logs
+test-integration-logs:
+	docker compose logs

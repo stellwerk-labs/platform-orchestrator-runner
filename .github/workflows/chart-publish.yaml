@@ -1,0 +1,55 @@
+name: Chart Publish
+
+on:
+  push:
+    tags:
+      - "chart-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      add_beta_suffix:
+        description: 'Add -beta suffix to Chart version'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  HELM_REGISTRY_HOST: ghcr.io/stellwerk-labs/charts
+  HELM_REGISTRY_USER: ${{ github.actor }}
+  HELM_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  publish-chart:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+      - name: Get chart name and version
+        id: get_name_version
+        run: |
+          name=$(cat charts/platform-orchestrator-kubernetes-agent-runner/Chart.yaml | grep "name:" | sed 's/name://g' | tr -d '[:space:]')
+          version=$(cat charts/platform-orchestrator-kubernetes-agent-runner/Chart.yaml | grep "version:" | sed 's/version://g' | tr -d '[:space:]')
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            expected_tag="chart-v${version}"
+            if [[ "${{ github.ref_name }}" != "${expected_tag}" ]]; then
+              echo "Expected tag ${expected_tag} for chart version ${version}" >&2
+              exit 1
+            fi
+          elif [[ "${{ inputs.add_beta_suffix }}" == "true" ]]; then
+            version="${version}-beta"
+          fi
+
+          echo Name: $name, Version: $version
+          echo "NAME=$name" >> $GITHUB_OUTPUT
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+      - name: Package chart
+        run: helm package charts/platform-orchestrator-kubernetes-agent-runner/ --version ${{ steps.get_name_version.outputs.VERSION }}
+      - name: Push Chart
+        run: |
+          FILENAME="${{ steps.get_name_version.outputs.NAME }}-${{ steps.get_name_version.outputs.VERSION }}.tgz"
+          helm registry login ghcr.io -u ${HELM_REGISTRY_USER} -p ${HELM_REGISTRY_PASSWORD}
+          helm push ${FILENAME} oci://${HELM_REGISTRY_HOST}

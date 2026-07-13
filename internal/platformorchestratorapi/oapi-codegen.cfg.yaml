@@ -1,0 +1,18 @@
+# Config used for generating the API models and server stubs based on the openapi/spec.yaml
+package: platformorchestratorapi
+generate:
+  models: true
+  client: true
+  echo-server: false
+output-options:
+  include-operation-ids:
+    - getDeploymentBundle
+    - getDeploymentLogs
+    - createDeployment
+    - updateDeploymentResults
+    - getDeployment
+    - listActiveResourceNodes
+    - waitForRemoteRunnerMessages
+    - waitForDeploymentComplete
+    - getDeploymentEncryptedOutputs
+output: client.gen.go

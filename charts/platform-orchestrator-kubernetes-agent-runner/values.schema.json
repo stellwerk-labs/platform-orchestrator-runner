@@ -1,0 +1,452 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "affinity": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "affinity",
+      "type": "object"
+    },
+    "commonAnnotations": {
+      "additionalProperties": false,
+      "description": "commonAnnotations Annotations to add to all deployed objects",
+      "required": [],
+      "title": "commonAnnotations",
+      "type": "object"
+    },
+    "commonLabels": {
+      "additionalProperties": false,
+      "description": "# commonLabels Labels to add to all deployed objects",
+      "required": [],
+      "title": "commonLabels",
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "default": "",
+      "description": "String to fully override platform-orchestrator-kubernetes-agent-runner.fullname template",
+      "title": "fullnameOverride",
+      "type": "string"
+    },
+    "global": {
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "image": {
+      "additionalProperties": false,
+      "properties": {
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "title": "pullPolicy",
+          "type": "string"
+        },
+        "repository": {
+          "default": "ghcr.io/stellwerk-labs/platform-orchestrator-runner",
+          "title": "repository",
+          "type": "string"
+        },
+        "tag": {
+          "default": "",
+          "description": "Overrides the image tag whose default is the chart appVersion.",
+          "title": "tag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "pullPolicy",
+        "tag"
+      ],
+      "title": "image",
+      "type": "object"
+    },
+    "imagePullSecrets": {
+      "items": {
+        "required": []
+      },
+      "title": "imagePullSecrets",
+      "type": "array"
+    },
+    "jobsRbac": {
+      "additionalProperties": false,
+      "description": "jobsRbac.create Whether to create \u0026 use RBAC resources for runner job or not",
+      "properties": {
+        "create": {
+          "default": true,
+          "title": "create",
+          "type": "boolean"
+        },
+        "namespace": {
+          "default": "",
+          "description": "Namespace where the runner jobs and the role they run with will be created. If not set, it will use the same namespace as the deployment",
+          "title": "namespace",
+          "type": "string"
+        },
+        "serviceAccountName": {
+          "default": "kubernetes-runner-job",
+          "description": "The name of the service account to use for the runner job and specified in the kubernetes-agent configuration in the Platform Orchestrator\nIt should be different from the main service account used by the kubernetes-agent deployment",
+          "title": "serviceAccountName",
+          "type": "string"
+        }
+      },
+      "required": [
+        "create",
+        "serviceAccountName",
+        "namespace"
+      ],
+      "title": "jobsRbac",
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "",
+      "description": "String to partially override platform-orchestrator-kubernetes-agent-runner.fullname template (will maintain the release name)",
+      "title": "nameOverride",
+      "type": "string"
+    },
+    "namespaceOverride": {
+      "default": "",
+      "description": "namespaceOverride String to fully override platform-orchestrator-kubernetes-agent-runner.namespace.",
+      "title": "namespaceOverride",
+      "type": "string"
+    },
+    "nodeSelector": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "nodeSelector",
+      "type": "object"
+    },
+    "platformOrchestrator": {
+      "additionalProperties": false,
+      "properties": {
+        "existingSecret": {
+          "default": "",
+          "description": "An existing secret containing the private key",
+          "title": "existingSecret",
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "default": "private_key",
+          "description": "The key in the secret that contains the private key",
+          "title": "existingSecretKey",
+          "type": "string"
+        },
+        "extraEnvVars": {
+          "description": "Additional runtime environment variables for the Agent.",
+          "items": {
+            "required": []
+          },
+          "title": "extraEnvVars",
+          "type": "array"
+        },
+        "logLevel": {
+          "default": "info",
+          "description": "The log level for the runner. One of: debug, info, warn, error",
+          "title": "logLevel",
+          "type": "string"
+        },
+        "orgId": {
+          "default": "",
+          "description": "The Platform Orchestrator Organization.",
+          "title": "orgId",
+          "type": "string"
+        },
+        "privateKey": {
+          "default": "",
+          "description": "Private key used by the platform-orchestrator-kubernetes-agent-runner.",
+          "title": "privateKey",
+          "type": "string"
+        },
+        "runnerId": {
+          "default": "",
+          "description": "The id of the kubernetes-agent runner registered in Platform Orchestrator.",
+          "title": "runnerId",
+          "type": "string"
+        }
+      },
+      "required": [
+        "orgId",
+        "runnerId",
+        "privateKey",
+        "existingSecretKey",
+        "existingSecret",
+        "extraEnvVars",
+        "logLevel"
+      ],
+      "title": "platformOrchestrator",
+      "type": "object"
+    },
+    "podAnnotations": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "podAnnotations",
+      "type": "object"
+    },
+    "podLabels": {
+      "additionalProperties": false,
+      "required": [],
+      "title": "podLabels",
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "additionalProperties": false,
+      "properties": {
+        "fsGroup": {
+          "default": 1000,
+          "title": "fsGroup",
+          "type": "integer"
+        },
+        "fsGroupChangePolicy": {
+          "default": "Always",
+          "title": "fsGroupChangePolicy",
+          "type": "string"
+        },
+        "runAsGroup": {
+          "default": 1000,
+          "title": "runAsGroup",
+          "type": "integer"
+        },
+        "runAsNonRoot": {
+          "default": true,
+          "title": "runAsNonRoot",
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "default": 1000,
+          "title": "runAsUser",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "fsGroup",
+        "fsGroupChangePolicy",
+        "runAsGroup",
+        "runAsUser",
+        "runAsNonRoot"
+      ],
+      "title": "podSecurityContext",
+      "type": "object"
+    },
+    "rbac": {
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "default": true,
+          "description": "rbac.create Whether to create \u0026 use RBAC resources or not\n",
+          "title": "create",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "create"
+      ],
+      "title": "rbac",
+      "type": "object"
+    },
+    "replicaCount": {
+      "default": 1,
+      "title": "replicaCount",
+      "type": "integer"
+    },
+    "resources": {
+      "additionalProperties": false,
+      "properties": {
+        "limits": {
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "default": "0.250",
+              "title": "cpu",
+              "type": "string"
+            },
+            "memory": {
+              "default": "256Mi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "title": "limits",
+          "type": "object"
+        },
+        "requests": {
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "default": "0.025",
+              "title": "cpu",
+              "type": "string"
+            },
+            "memory": {
+              "default": "128Mi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "title": "requests",
+          "type": "object"
+        }
+      },
+      "required": [
+        "limits",
+        "requests"
+      ],
+      "title": "resources",
+      "type": "object"
+    },
+    "securityContext": {
+      "additionalProperties": false,
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "default": false,
+          "title": "allowPrivilegeEscalation",
+          "type": "boolean"
+        },
+        "capabilities": {
+          "additionalProperties": false,
+          "properties": {
+            "drop": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "title": "drop",
+              "type": "array"
+            }
+          },
+          "required": [
+            "drop"
+          ],
+          "title": "capabilities",
+          "type": "object"
+        },
+        "readOnlyRootFilesystem": {
+          "default": true,
+          "title": "readOnlyRootFilesystem",
+          "type": "boolean"
+        },
+        "runAsNonRoot": {
+          "default": true,
+          "title": "runAsNonRoot",
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "default": 1000,
+          "title": "runAsUser",
+          "type": "integer"
+        },
+        "seccompProfile": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "default": "RuntimeDefault",
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "seccompProfile",
+          "type": "object"
+        }
+      },
+      "required": [
+        "allowPrivilegeEscalation",
+        "capabilities",
+        "readOnlyRootFilesystem",
+        "runAsNonRoot",
+        "runAsUser",
+        "seccompProfile"
+      ],
+      "title": "securityContext",
+      "type": "object"
+    },
+    "serviceAccount": {
+      "additionalProperties": false,
+      "description": "This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "required": [],
+          "title": "annotations"
+        },
+        "create": {
+          "default": true,
+          "description": "Specifies whether a service account should be created",
+          "title": "create",
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "title": "name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "create",
+        "name"
+      ],
+      "title": "serviceAccount",
+      "type": "object"
+    },
+    "tolerations": {
+      "items": {
+        "required": []
+      },
+      "title": "tolerations",
+      "type": "array"
+    },
+    "volumeMounts": {
+      "items": {
+        "required": []
+      },
+      "title": "volumeMounts",
+      "type": "array"
+    },
+    "volumes": {
+      "items": {
+        "required": []
+      },
+      "title": "volumes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "platformOrchestrator",
+    "replicaCount",
+    "image",
+    "imagePullSecrets",
+    "nameOverride",
+    "fullnameOverride",
+    "namespaceOverride",
+    "serviceAccount",
+    "rbac",
+    "jobsRbac",
+    "commonLabels",
+    "commonAnnotations",
+    "podAnnotations",
+    "podLabels",
+    "podSecurityContext",
+    "securityContext",
+    "resources",
+    "volumes",
+    "volumeMounts",
+    "nodeSelector",
+    "tolerations",
+    "affinity"
+  ],
+  "type": "object"
+}

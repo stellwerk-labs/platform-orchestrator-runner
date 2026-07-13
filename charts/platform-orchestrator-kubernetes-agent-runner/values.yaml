@@ -1,0 +1,106 @@
+# Default values for platform-orchestrator-kubernetes-agent-runner.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+platformOrchestrator:
+  # The Platform Orchestrator Organization.
+  orgId: ""
+  # The id of the kubernetes-agent runner registered in Platform Orchestrator.
+  runnerId: ""
+  # Private key used by the platform-orchestrator-kubernetes-agent-runner.
+  privateKey: ""
+  # The key in the secret that contains the private key
+  existingSecretKey: "private_key"
+  # An existing secret containing the private key
+  existingSecret: ""
+  # Additional runtime environment variables for the Agent.
+  extraEnvVars: []
+  # The log level for the runner. One of: debug, info, warn, error
+  logLevel: "info"
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/stellwerk-labs/platform-orchestrator-runner
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+# String to partially override platform-orchestrator-kubernetes-agent-runner.fullname template (will maintain the release name)
+nameOverride: ""
+# String to fully override platform-orchestrator-kubernetes-agent-runner.fullname template
+fullnameOverride: ""
+# namespaceOverride String to fully override platform-orchestrator-kubernetes-agent-runner.namespace.
+namespaceOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # @schema
+  # additionalProperties: true
+  # @schema
+  annotations: {}
+  name: ""
+
+rbac:
+  #rbac.create Whether to create & use RBAC resources or not
+  #
+  create: true
+
+# jobsRbac.create Whether to create & use RBAC resources for runner job or not
+jobsRbac:
+  create: true
+  # The name of the service account to use for the runner job and specified in the kubernetes-agent configuration in the Platform Orchestrator
+  # It should be different from the main service account used by the kubernetes-agent deployment
+  serviceAccountName: "kubernetes-runner-job"
+  # Namespace where the runner jobs and the role they run with will be created. If not set, it will use the same namespace as the deployment
+  namespace: ""
+
+## commonLabels Labels to add to all deployed objects
+commonLabels: {}
+
+# commonAnnotations Annotations to add to all deployed objects
+commonAnnotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: Always
+  runAsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  limits:
+    cpu: "0.250"
+    memory: 256Mi
+  requests:
+    cpu: "0.025"
+    memory: 128Mi
+
+
+
+volumes: []
+
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
