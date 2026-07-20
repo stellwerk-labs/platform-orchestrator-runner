@@ -13,9 +13,10 @@ It is responsible of:
 
 Remote runners must set `REMOTE_URL` to the HTTPS URL of the Platform
 Orchestrator installation they are intended to serve. The runner deliberately
-has no default endpoint: if `REMOTE_URL` is unset, it exits with an `ERROR` log
-and does not attempt an outbound connection. The `--remote-connect` flag can
-be used to supply an explicit endpoint for an individual invocation.
+has no default endpoint: if neither `REMOTE_URL` nor `--remote-connect` is
+provided, it exits with an `ERROR` log and does not attempt an outbound
+connection. The `--remote-connect` flag supplies an explicit endpoint for an
+individual invocation.
 
 ## Publishing Helm Chart
 

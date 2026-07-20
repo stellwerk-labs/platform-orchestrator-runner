@@ -121,15 +121,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
     permissions:
       contents: read
-      packages: read
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-          docker run --pull=always --rm --entrypoint cat \
-            ghcr.io/stellwerk-labs/semantic-release-action /action/default.commitlint.config.mjs > commitlint.config.mjs
       - uses: wagoid/commitlint-github-action@v6.2.1
 
   helm-validate:

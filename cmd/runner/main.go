@@ -121,6 +121,9 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 			if remoteConnectURL == "" {
 				remoteConnectURL = cfg.RemoteUrl
 			}
+			if remoteConnectURL == "" {
+				return nil, errors.New("REMOTE_URL must be configured for remote mode or supplied with --remote-connect; refusing to connect")
+			}
 
 			if _, err := url.Parse(remoteConnectURL); err != nil {
 				return nil, errors.Wrap(err, "invalid remote connect URL provided")

@@ -47,7 +47,7 @@ type RemoteModeConfiguration struct {
 	OrgID      string `env:"ORG_ID,required"`
 	RunnerId   string `env:"RUNNER_ID,required"`
 	PrivateKey string `env:"PRIVATE_KEY,required"`
-	RemoteUrl  string `env:"REMOTE_URL,required"`
+	RemoteUrl  string `env:"REMOTE_URL"`
 }
 
 func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
@@ -105,7 +105,7 @@ func GetRemoteModeConfiguration() (*RemoteModeConfiguration, error) {
 		DefaultNoInit:    true,
 		Target:           conf,
 	}); err != nil {
-		return nil, errors.Wrap(err, "REMOTE_URL must be configured for remote mode; refusing to connect")
+		return nil, err
 	}
 
 	validate := validator.New()
