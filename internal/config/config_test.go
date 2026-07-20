@@ -103,20 +103,16 @@ func TestGetStandardModeConfiguration(t *testing.T) {
 	require.Equal(t, id.Recipient().String(), conf.EncryptingKey)
 }
 
-func TestGetRemoteModeConfiguration_DefaultValues(t *testing.T) {
+func TestGetRemoteModeConfiguration_RequiresRemoteURL(t *testing.T) {
 	t.Setenv("ORG_ID", "test-org")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("PLATFORM_ORCHESTRATOR_API_PREFIX", "https://platform-orchestrator.com")
 	t.Setenv("RUNNER_ID", "remote-runner")
 	t.Setenv("PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEIIX6m7b0f6z8kz3K1t5y5p+7i4mJgWvXUe3j1kP3ZkP9o\n-----END PRIVATE KEY-----")
 
-	conf, err := GetRemoteModeConfiguration()
-	require.NoError(t, err)
-	require.Equal(t, "debug", conf.LogLevel)
-	require.Equal(t, "test-org", conf.OrgID)
-	require.Equal(t, "remote-runner", conf.RunnerId)
-	require.Equal(t, "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEIIX6m7b0f6z8kz3K1t5y5p+7i4mJgWvXUe3j1kP3ZkP9o\n-----END PRIVATE KEY-----", conf.PrivateKey)
-	require.Equal(t, "https://api.platform-orchestrator.dev", conf.RemoteUrl)
+	_, err := GetRemoteModeConfiguration()
+	require.ErrorContains(t, err, "REMOTE_URL must be configured for remote mode; refusing to connect")
+	require.ErrorContains(t, err, "RemoteUrl: missing required value: REMOTE_URL")
 }
 
 func TestGetRemoteModeConfiguration(t *testing.T) {

@@ -22,6 +22,8 @@ RUN --mount=target=. \
 
 FROM alpine:3.23.4 AS final
 
+LABEL org.opencontainers.image.source="https://github.com/stellwerk-labs/platform-orchestrator-runner"
+
 RUN apk add --no-cache git openssh-client
 
 ARG NOBODY_UID=65534
