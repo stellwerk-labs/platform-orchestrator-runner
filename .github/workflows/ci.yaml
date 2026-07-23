@@ -75,7 +75,7 @@ jobs:
           key: ${{ runner.os }}-docker-go-cache-${{ hashFiles('**/go.sum') }}
 
       - name: inject go-mod-cache into docker
-        uses: reproducible-containers/buildkit-cache-dance@v3.1.0
+        uses: reproducible-containers/buildkit-cache-dance@v3.4.0
         with:
           cache-map: |
             {
@@ -85,7 +85,7 @@ jobs:
           skip-extraction: ${{ steps.cache.outputs.cache-hit }}
 
       - name: Setup Score Compose
-        uses: score-spec/setup-score@v3
+        uses: score-spec/setup-score@v3.2.4
         with:
           file: score-compose
           version: latest
