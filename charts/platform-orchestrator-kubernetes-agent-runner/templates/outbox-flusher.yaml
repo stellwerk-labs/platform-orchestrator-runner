@@ -1,0 +1,86 @@
+{{- if .Values.outbox.enabled }}
+{{- $natsURL := .Values.nats.url }}
+{{- if and (eq .Values.nats.mode "airgap") (index .Values "protected-nats" "enabled") (not $natsURL) }}
+{{- $natsURL = printf "nats://%s-protected-nats:4222" .Release.Name }}
+{{- end }}
+{{- $jobSecret := coalesce .Values.nats.jobCredentialsExistingSecret .Values.nats.existingSecret (printf "%s-nats-job" (include "platform-orchestrator-kubernetes-agent-runner.fullname" .)) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-outbox-flusher
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.deploymentJobNamespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: outbox-flusher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: outbox-flusher
+  template:
+    metadata:
+      labels:
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: outbox-flusher
+    spec:
+      serviceAccountName: {{ .Values.jobsRbac.serviceAccountName }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: outbox-flusher
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/runner/runner"]
+          args: ["outbox-flush"]
+          env:
+            - name: NATS_URL
+              value: {{ $natsURL | quote }}
+            - name: NATS_OUTBOX_DIR
+              value: /var/lib/platform-orchestrator-runner/outbox
+            {{- if and (eq .Values.nats.authType "token") (or .Values.nats.jobCredentialsExistingSecret .Values.nats.existingSecret .Values.nats.token) }}
+            - name: NATS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jobSecret }}
+                  key: {{ .Values.nats.tokenKey }}
+            {{- end }}
+            {{- if eq .Values.nats.authType "credentials" }}
+            - name: NATS_CREDS_FILE
+              value: /etc/nats-auth/creds
+            {{- end }}
+            {{- if .Values.nats.caEnabled }}
+            - name: NATS_CA_FILE
+              value: /etc/nats-auth/ca.crt
+            {{- end }}
+          volumeMounts:
+            - name: nats-outbox
+              mountPath: /var/lib/platform-orchestrator-runner/outbox
+            {{- if or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled }}
+            - name: nats-auth
+              mountPath: /etc/nats-auth
+              readOnly: true
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: nats-outbox
+          persistentVolumeClaim:
+            claimName: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-job-outbox
+        {{- if or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled }}
+        - name: nats-auth
+          secret:
+            secretName: {{ $jobSecret }}
+            items:
+              {{- if eq .Values.nats.authType "credentials" }}
+              - key: {{ .Values.nats.credentialsKey }}
+                path: creds
+              {{- end }}
+              {{- if .Values.nats.caEnabled }}
+              - key: {{ .Values.nats.caKey }}
+                path: ca.crt
+              {{- end }}
+        {{- end }}
+{{- end }}

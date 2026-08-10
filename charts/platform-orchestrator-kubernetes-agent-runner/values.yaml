@@ -7,16 +7,80 @@ platformOrchestrator:
   orgId: ""
   # The id of the kubernetes-agent runner registered in Platform Orchestrator.
   runnerId: ""
-  # Private key used by the platform-orchestrator-kubernetes-agent-runner.
-  privateKey: ""
-  # The key in the secret that contains the private key
-  existingSecretKey: "private_key"
-  # An existing secret containing the private key
-  existingSecret: ""
   # Additional runtime environment variables for the Agent.
   extraEnvVars: []
   # The log level for the runner. One of: debug, info, warn, error
   logLevel: "info"
+
+# Durable runner transport. In simple and edge modes this points to the central
+# JetStream service. In airgap mode it points to the protected-side broker.
+nats:
+  mode: simple
+  url: ""
+  authType: token
+  token: ""
+  existingSecret: ""
+  tokenKey: token
+  credentialsKey: creds
+  caKey: ca.crt
+  caEnabled: false
+  # Secret containing credentials in the namespace where deployment Jobs run.
+  jobCredentialsExistingSecret: ""
+
+outbox:
+  enabled: true
+  storageClassName: ""
+  size: 1Gi
+  accessModes:
+    - ReadWriteMany
+
+# Optional minimal protected-side broker for air-gapped compartments. Commands
+# enter it only through the signed diode importer; it is never clustered across
+# the boundary.
+protected-nats:
+  enabled: false
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          enabled: true
+          size: 2Gi
+    merge:
+      authorization:
+        token: << $NATS_AUTH_TOKEN >>
+  container:
+    env:
+      NATS_AUTH_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: ""
+            key: token
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+protectedNatsBootstrap:
+  image: natsio/nats-box:0.19.5
+
+# File-transfer relay endpoints for an external one-way diode device. Install
+# role=central outside the compartment and role=protected inside it. Each side
+# mounts its own diode endpoint; the chart does not claim a network path across
+# the boundary.
+diode:
+  enabled: false
+  role: protected
+  existingClaim: ""
+  signingKeyExistingSecret: ""
+  signingKey: signing-key.pem
+  verificationKeyExistingSecret: ""
+  verificationKey: verification-key.pem
+  commandSubject: ""
 
 replicaCount: 1
 

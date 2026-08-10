@@ -22,6 +22,7 @@ node_modules/
 
 # Dependency directories (remove the comment below to include it)
 vendor/
+charts/*/charts/*.tgz
 
 # gotestsum - unit test
 cover.out
@@ -29,6 +30,7 @@ cover.out
 # score
 .score-compose/
 compose.yaml
+integration-tests/.kind-e2e/
 
 # mocks
 **/mocks/

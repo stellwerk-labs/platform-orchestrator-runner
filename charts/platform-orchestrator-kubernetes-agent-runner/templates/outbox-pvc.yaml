@@ -1,0 +1,34 @@
+{{- if .Values.outbox.enabled }}
+{{- if not (has "ReadWriteMany" .Values.outbox.accessModes) }}{{ fail "shared runner/Job outbox requires outbox.accessModes to include ReadWriteMany" }}{{ end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-outbox
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+spec:
+  accessModes: {{ toJson .Values.outbox.accessModes }}
+  {{- with .Values.outbox.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.outbox.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-job-outbox
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.deploymentJobNamespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+spec:
+  accessModes: {{ toJson .Values.outbox.accessModes }}
+  {{- with .Values.outbox.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.outbox.size }}
+{{- end }}

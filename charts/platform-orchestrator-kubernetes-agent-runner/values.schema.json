@@ -111,6 +111,34 @@
       "title": "namespaceOverride",
       "type": "string"
     },
+    "nats": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["simple", "edge", "airgap"], "type": "string"},
+        "url": {"type": "string"},
+        "authType": {"enum": ["token", "credentials"], "type": "string"},
+        "token": {"type": "string"},
+        "existingSecret": {"type": "string"},
+        "tokenKey": {"type": "string"},
+        "credentialsKey": {"type": "string"},
+        "caKey": {"type": "string"},
+        "caEnabled": {"type": "boolean"},
+        "jobCredentialsExistingSecret": {"type": "string"}
+      },
+      "required": ["mode", "url", "authType", "token", "existingSecret", "tokenKey", "credentialsKey", "caKey", "caEnabled", "jobCredentialsExistingSecret"],
+      "type": "object"
+    },
+    "outbox": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "storageClassName": {"type": "string"},
+        "size": {"type": "string"}
+        ,"accessModes": {"type": "array", "items": {"enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"], "type": "string"}, "minItems": 1}
+      },
+      "required": ["enabled", "storageClassName", "size", "accessModes"],
+      "type": "object"
+    },
     "nodeSelector": {
       "additionalProperties": false,
       "required": [],
@@ -120,18 +148,6 @@
     "platformOrchestrator": {
       "additionalProperties": false,
       "properties": {
-        "existingSecret": {
-          "default": "",
-          "description": "An existing secret containing the private key",
-          "title": "existingSecret",
-          "type": "string"
-        },
-        "existingSecretKey": {
-          "default": "private_key",
-          "description": "The key in the secret that contains the private key",
-          "title": "existingSecretKey",
-          "type": "string"
-        },
         "extraEnvVars": {
           "description": "Additional runtime environment variables for the Agent.",
           "items": {
@@ -152,12 +168,6 @@
           "title": "orgId",
           "type": "string"
         },
-        "privateKey": {
-          "default": "",
-          "description": "Private key used by the platform-orchestrator-kubernetes-agent-runner.",
-          "title": "privateKey",
-          "type": "string"
-        },
         "runnerId": {
           "default": "",
           "description": "The id of the kubernetes-agent runner registered in Platform Orchestrator.",
@@ -168,9 +178,6 @@
       "required": [
         "orgId",
         "runnerId",
-        "privateKey",
-        "existingSecretKey",
-        "existingSecret",
         "extraEnvVars",
         "logLevel"
       ],
@@ -181,6 +188,26 @@
       "additionalProperties": false,
       "required": [],
       "title": "podAnnotations",
+      "type": "object"
+    },
+    "protected-nats": {
+      "type": "object"
+    },
+    "protectedNatsBootstrap": {
+      "type": "object"
+    },
+    "diode": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "role": {"enum": ["central", "protected"], "type": "string"},
+        "existingClaim": {"type": "string"},
+        "signingKeyExistingSecret": {"type": "string"},
+        "signingKey": {"type": "string"},
+        "verificationKeyExistingSecret": {"type": "string"},
+        "verificationKey": {"type": "string"},
+        "commandSubject": {"type": "string"}
+      },
       "type": "object"
     },
     "podLabels": {

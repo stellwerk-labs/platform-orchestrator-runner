@@ -6,30 +6,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"filippo.io/age"
-	"github.com/google/uuid"
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/pkg/errors"
 
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/utils"
 )
 
 // baseRunner holds the fields and shared logic used by all local IaC runners.
 // It is not exported and is embedded by the concrete runner types.
 type baseRunner struct {
-	apiClient    *platformorchestratorapi.ClientWithResponses
 	orgID        string
 	deploymentID string
-	token        string
 	folder       string
 	binaryPath   string
 	recipient    age.Recipient
+	bundleLoader func(context.Context) ([]byte, error)
 }
 
 func (r *baseRunner) planFile() string {
@@ -38,18 +34,14 @@ func (r *baseRunner) planFile() string {
 
 // CreateIaCFolder downloads the deployment bundle and extracts it into the working folder.
 func (r *baseRunner) CreateIaCFolder(ctx context.Context) error {
-	deploymentId, _ := uuid.Parse(r.deploymentID)
-	resp, err := r.apiClient.GetDeploymentBundleWithResponse(ctx, r.orgID, deploymentId, &platformorchestratorapi.GetDeploymentBundleParams{XDeploymentToken: r.token})
-	if err != nil {
-		return errors.Wrap(err, "failed to obtain deployment bundle from api")
-	} else if resp.StatusCode() == http.StatusBadRequest {
-		return errors.Errorf("request is invalid: %s", resp.JSON400.Message)
-	} else if resp.StatusCode() == http.StatusNotFound {
-		return errors.Errorf("deployment not found: %s", resp.JSON404.Message)
-	} else if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("unexpected status code %d when creating module rule: %s", resp.StatusCode(), string(resp.Body))
+	if r.bundleLoader != nil {
+		bundle, err := r.bundleLoader(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to obtain deployment bundle from NATS Object Store")
+		}
+		return errors.Wrapf(unarchiveBundleToFolder(bundle, r.folder), "failed to unbundle the archive and store it in %s", r.folder)
 	}
-	return errors.Wrapf(unarchiveBundleToFolder(resp.Body, r.folder), "failed to unbundle the archive and store it in %s", r.folder)
+	return errors.New("NATS Object Store bundle loader is not configured")
 }
 
 // Version returns the version string reported by the configured binary.
@@ -229,8 +221,8 @@ func (r *baseRunner) parseError(action string, err error) (*RunnerError, error) 
 					Summary: tfLogMessage.Summary,
 					Detail:  tfLogMessage.Detail,
 				}
-				if tfLogMessage.Diagnostic.Snippet != nil && tfLogMessage.Diagnostic.Snippet.Context != nil {
-					idWithType := strings.Split(*tfLogMessage.Diagnostic.Snippet.Context, " ")
+				if tfLogMessage.Snippet != nil && tfLogMessage.Snippet.Context != nil {
+					idWithType := strings.Split(*tfLogMessage.Snippet.Context, " ")
 					if len(idWithType) >= 1 {
 						switch idWithType[0] {
 						case "provider":
@@ -240,9 +232,9 @@ func (r *baseRunner) parseError(action string, err error) (*RunnerError, error) 
 						case "output":
 							runnerErr.EntityType = CategoryOutput
 						default:
-							if tfLogMessage.Diagnostic.Range != nil && strings.HasPrefix(tfLogMessage.Diagnostic.Range.Filename, "modules/") {
+							if tfLogMessage.Range != nil && strings.HasPrefix(tfLogMessage.Range.Filename, "modules/") {
 								runnerErr.EntityType = CategoryModule
-								parts := strings.Split(strings.TrimPrefix(tfLogMessage.Diagnostic.Range.Filename, "modules/"), "/")
+								parts := strings.Split(strings.TrimPrefix(tfLogMessage.Range.Filename, "modules/"), "/")
 								if len(parts) >= 2 {
 									runnerErr.EntityId = parts[0]
 									runnerErr.EntityVersion = parts[1]
@@ -258,7 +250,7 @@ func (r *baseRunner) parseError(action string, err error) (*RunnerError, error) 
 						}
 						runnerErr.EntityId = idWithType[1]
 					}
-					runnerErr.CodeHint = strings.TrimSpace(tfLogMessage.Diagnostic.Snippet.Code)
+					runnerErr.CodeHint = strings.TrimSpace(tfLogMessage.Snippet.Code)
 				}
 				return runnerErr, nil
 			}

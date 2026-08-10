@@ -35,13 +35,11 @@ func cleanTmpDir() {
 
 func init() {
 	stdCfgConfig = &config.StandardModeConfiguration{
-		OrgID:                         orgId,
-		DeploymentID:                  deploymentId,
-		LogLevel:                      "DEBUG",
-		Token:                         "test-token",
-		PlatformOrchestratorApiPrefix: "http://localhost:8080",
-		IaCCodeDir:                    "./tmp/opt/runner/tofu",
-		EncryptingKey:                 "test-encrypting-key",
+		OrgID:         orgId,
+		DeploymentID:  deploymentId,
+		LogLevel:      "DEBUG",
+		IaCCodeDir:    "./tmp/opt/runner/tofu",
+		EncryptingKey: "test-encrypting-key",
 	}
 }
 
@@ -288,7 +286,7 @@ func TestExecuteStandardMode_PlanOnly_excludes_metadata_key(t *testing.T) {
 	runnerMock.EXPECT().Init(gomock.Any()).Return("init-output", nil).Times(1)
 	runnerMock.EXPECT().Plan(gomock.Any()).Return("plan-output", map[string]interface{}{
 		"platform_orchestrator_metadata": map[string]interface{}{"node1": map[string]interface{}{"foo": "bar"}},
-		"output1": "value1",
+		"output1":                        "value1",
 	}, &runner.IaCChanges{}, nil).Times(1)
 	runnerMock.EXPECT().EncryptString(gomock.Any()).DoAndReturn(func(s string) (string, error) {
 		var outputs map[string]interface{}
@@ -325,7 +323,7 @@ func TestExecuteStandardMode_Deploy_excludes_metadata_key_from_outputs(t *testin
 	runnerMock.EXPECT().OutputMetadata(gomock.Any(), "platform_orchestrator_metadata").Return(`{"node1":{"foo":"bar"}}`, nil).Times(1)
 	runnerMock.EXPECT().Output(gomock.Any()).Return(map[string]interface{}{
 		"platform_orchestrator_metadata": map[string]interface{}{"node1": map[string]interface{}{"foo": "bar"}},
-		"output1": "value1",
+		"output1":                        "value1",
 	}, nil).Times(1)
 	runnerMock.EXPECT().EncryptString(gomock.Any()).DoAndReturn(func(s string) (string, error) {
 		var outputs map[string]interface{}

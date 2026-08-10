@@ -21,12 +21,16 @@ jobs:
   publish-chart:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v6
       - name: Install Helm
         uses: azure/setup-helm@v5
+      - name: Add NATS chart repository
+        run: helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+      - name: Build chart dependencies
+        run: helm dependency build charts/platform-orchestrator-kubernetes-agent-runner
       - name: Get chart name and version
         id: get_name_version
         run: |
@@ -53,3 +57,15 @@ jobs:
           FILENAME="${{ steps.get_name_version.outputs.NAME }}-${{ steps.get_name_version.outputs.VERSION }}.tgz"
           helm registry login ghcr.io -u ${HELM_REGISTRY_USER} -p ${HELM_REGISTRY_PASSWORD}
           helm push ${FILENAME} oci://${HELM_REGISTRY_HOST}
+      - name: Create GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          filename="${{ steps.get_name_version.outputs.NAME }}-${{ steps.get_name_version.outputs.VERSION }}.tgz"
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "$notes"
+          gh release create "$GITHUB_REF_NAME" "$filename" \
+            --verify-tag \
+            --notes-file "$notes"

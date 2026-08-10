@@ -24,7 +24,7 @@ const (
 )
 
 func TestNewK8sJobsClient(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 	client := NewK8sJobsClient(fakeClientset)
 
 	assert.NotNil(t, client)
@@ -32,7 +32,7 @@ func TestNewK8sJobsClient(t *testing.T) {
 }
 
 func TestK8sJobsClient_CreateJob_Success(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 	client := NewK8sJobsClient(fakeClientset)
 
 	testJob := &v1.Job{
@@ -65,7 +65,7 @@ func TestK8sJobsClient_CreateJob_Success(t *testing.T) {
 }
 
 func TestK8sJobsClient_CreateJob_K8sCreateError(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 
 	fakeClientset.PrependReactor("create", "jobs", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, &v1.Job{}, fmt.Errorf("simulated k8s create error")
@@ -86,7 +86,7 @@ func TestK8sJobsClient_CreateJob_K8sCreateError(t *testing.T) {
 }
 
 func TestK8sJobsClient_CheckJobStatus_JobExists(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 
 	job := &v1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -114,7 +114,7 @@ func TestK8sJobsClient_CheckJobStatus_JobExists(t *testing.T) {
 }
 
 func TestK8sJobsClient_CheckJobStatus_JobNotFound(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 	client := NewK8sJobsClient(fakeClientset)
 
 	status, err := client.CheckJobStatus(context.Background(), testNamespace, "non-existent-job")
@@ -124,7 +124,7 @@ func TestK8sJobsClient_CheckJobStatus_JobNotFound(t *testing.T) {
 }
 
 func TestK8sJobsClient_CheckJobStatus_K8sError(t *testing.T) {
-	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset := fake.NewClientset()
 
 	fakeClientset.PrependReactor("get", "jobs", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("simulated k8s get error")
@@ -139,7 +139,7 @@ func TestK8sJobsClient_CheckJobStatus_K8sError(t *testing.T) {
 }
 
 func TestKubernetesClient_GetPodJob_NoPods(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 	client := NewK8sJobsClient(fakeClient)
 
 	pod, err := client.GetPodJob(context.Background(), testNamespace, testJobName)
@@ -149,7 +149,7 @@ func TestKubernetesClient_GetPodJob_NoPods(t *testing.T) {
 }
 
 func TestKubernetesClient_GetPodJob_ListError(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	fakeClient.PrependReactor("list", "pods", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("simulated k8s list error")
@@ -164,7 +164,7 @@ func TestKubernetesClient_GetPodJob_ListError(t *testing.T) {
 }
 
 func TestKubernetesClient_GetPodJob_ListNotFound(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	fakeClient.PrependReactor("list", "pods", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, k8serrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "")
@@ -179,7 +179,7 @@ func TestKubernetesClient_GetPodJob_ListNotFound(t *testing.T) {
 }
 
 func TestKubernetesClient_GetPodJob_ListForbidden(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	fakeClient.PrependReactor("list", "pods", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, k8serrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", fmt.Errorf("access denied"))
@@ -194,7 +194,7 @@ func TestKubernetesClient_GetPodJob_ListForbidden(t *testing.T) {
 }
 
 func TestKubernetesClient_GetJobWarningEvents_WithJobEvents(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	event1 := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -259,7 +259,7 @@ func TestKubernetesClient_GetJobWarningEvents_WithJobEvents(t *testing.T) {
 }
 
 func TestKubernetesClient_GetJobWarningEvents_WithPodEvents(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -300,7 +300,7 @@ func TestKubernetesClient_GetJobWarningEvents_WithPodEvents(t *testing.T) {
 }
 
 func TestKubernetesClient_GetObjectWarningEvents_NoEvents(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 	client := NewK8sJobsClient(fakeClient)
 
 	warnings, err := client.GetObjectWarningEvents(context.Background(), testNamespace, testJobName)
@@ -309,7 +309,7 @@ func TestKubernetesClient_GetObjectWarningEvents_NoEvents(t *testing.T) {
 }
 
 func TestKubernetesClient_GetObjectWarningEvents_ListEventsError(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	fakeClient.PrependReactor("list", "events", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("simulated k8s list events error")
@@ -324,7 +324,7 @@ func TestKubernetesClient_GetObjectWarningEvents_ListEventsError(t *testing.T) {
 }
 
 func TestKubernetesClient_GetObjectWarningEvents_EventsForbiddenError(t *testing.T) {
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	fakeClient.PrependReactor("list", "events", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, k8serrors.NewForbidden(schema.GroupResource{Resource: "events"}, "", fmt.Errorf("access denied"))

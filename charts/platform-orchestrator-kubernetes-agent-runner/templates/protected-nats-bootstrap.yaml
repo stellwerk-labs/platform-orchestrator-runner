@@ -1,0 +1,45 @@
+{{- if index .Values "protected-nats" "enabled" }}
+{{- $bootstrapRevision := printf "%v-%v-%v" .Chart.Version .Values.protectedNatsBootstrap.image (index .Values "protected-nats" "config") | sha256sum | trunc 8 }}
+{{- $authSecret := index .Values "protected-nats" "container" "env" "NATS_AUTH_TOKEN" "valueFrom" "secretKeyRef" "name" }}
+{{- $authKey := index .Values "protected-nats" "container" "env" "NATS_AUTH_TOKEN" "valueFrom" "secretKeyRef" "key" }}
+{{- if not $authSecret }}{{ fail "protected-nats requires container.env.NATS_AUTH_TOKEN.valueFrom.secretKeyRef.name" }}{{ end }}
+{{- if not .Values.nats.existingSecret }}{{ fail "protected-nats requires nats.existingSecret for the runner and relay clients" }}{{ end }}
+{{- if ne $authSecret .Values.nats.existingSecret }}{{ fail "protected-nats auth Secret and nats.existingSecret must name the same Secret" }}{{ end }}
+{{- if and (ne (include "platform-orchestrator-kubernetes-agent-runner.namespace" .) (include "platform-orchestrator-kubernetes-agent-runner.deploymentJobNamespace" .)) (not .Values.nats.jobCredentialsExistingSecret) }}{{ fail "protected-nats with a separate Job namespace requires nats.jobCredentialsExistingSecret in that namespace" }}{{ end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-protected-nats-bootstrap-{{ $bootstrapRevision }}
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: protected-nats-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: {{ .Values.protectedNatsBootstrap.image | quote }}
+          env:
+            - name: NATS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $authSecret }}
+                  key: {{ $authKey }}
+          command: ["sh", "-ec"]
+          args:
+            - |
+              server="nats://{{ .Release.Name }}-protected-nats:4222"
+              auth="--server=$server --token=$NATS_TOKEN"
+              until nats $auth server ping --count=1; do sleep 2; done
+              nats $auth stream add PO_RUNNER_COMMANDS --subjects='po.v1.orgs.*.runners.*.commands' --retention=work --storage=file --replicas=1 --max-age=720h --max-bytes=268435456 --dupe-window=10m --allow-msg-ttl --defaults || nats $auth stream edit PO_RUNNER_COMMANDS --subjects='po.v1.orgs.*.runners.*.commands' --max-age=720h --max-bytes=268435456 --dupe-window=10m --allow-msg-ttl --force
+              nats $auth stream add PO_RUNNER_EVENTS --subjects='po.v1.orgs.*.runners.*.events.>' --retention=limits --storage=file --replicas=1 --max-age=720h --max-bytes=268435456 --dupe-window=10m --allow-msg-ttl --defaults || nats $auth stream edit PO_RUNNER_EVENTS --subjects='po.v1.orgs.*.runners.*.events.>' --max-age=720h --max-bytes=268435456 --dupe-window=10m --allow-msg-ttl --force
+              nats $auth object add PO_RUNNER_LOGS --storage=file --replicas=1 --ttl=720h --max-bucket-size=536870912 || nats $auth object edit PO_RUNNER_LOGS --replicas=1 --ttl=720h --max-bucket-size=536870912
+              nats $auth object add PO_RUNNER_BUNDLES --storage=file --replicas=1 --ttl=744h --max-bucket-size=805306368 || nats $auth object edit PO_RUNNER_BUNDLES --replicas=1 --ttl=744h --max-bucket-size=805306368
+{{- end }}

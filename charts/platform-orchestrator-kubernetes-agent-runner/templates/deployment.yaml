@@ -42,28 +42,65 @@ spec:
           - configMapRef:
               name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}
           env:
-          - name: PRIVATE_KEY
+          {{- if and (eq .Values.nats.authType "token") (or .Values.nats.existingSecret .Values.nats.token) }}
+          - name: NATS_TOKEN
             valueFrom:
               secretKeyRef:
-                {{ if .Values.platformOrchestrator.existingSecret -}}
-                name: {{ .Values.platformOrchestrator.existingSecret }}
-                key: {{ .Values.platformOrchestrator.existingSecretKey }}
-                {{- else -}}
-                name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}
-                key: private_key
-                {{- end }}
+                name: {{ default (include "platform-orchestrator-kubernetes-agent-runner.fullname" .) .Values.nats.existingSecret }}
+                key: {{ .Values.nats.tokenKey }}
+          {{- end }}
+          {{- if eq .Values.nats.authType "credentials" }}
+          - name: NATS_CREDS_FILE
+            value: /etc/nats-auth/creds
+          {{- end }}
+          {{- if .Values.nats.caEnabled }}
+          - name: NATS_CA_FILE
+            value: /etc/nats-auth/ca.crt
+          {{- end }}
           {{- with .Values.platformOrchestrator.extraEnvVars }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.outbox.enabled .Values.volumeMounts (and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled)) }}
           volumeMounts:
+            {{- if .Values.outbox.enabled }}
+            - name: nats-outbox
+              mountPath: /var/lib/platform-orchestrator-runner/outbox
+            {{- end }}
+            {{- if and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled) }}
+            - name: nats-auth
+              mountPath: /etc/nats-auth
+              readOnly: true
+            {{- end }}
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.outbox.enabled .Values.volumes (and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled)) }}
       volumes:
+        {{- if .Values.outbox.enabled }}
+        - name: nats-outbox
+          persistentVolumeClaim:
+            claimName: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-outbox
+        {{- end }}
+        {{- if and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled) }}
+        - name: nats-auth
+          secret:
+            secretName: {{ .Values.nats.existingSecret }}
+            items:
+              {{- if eq .Values.nats.authType "credentials" }}
+              - key: {{ .Values.nats.credentialsKey }}
+                path: creds
+              {{- end }}
+              {{- if .Values.nats.caEnabled }}
+              - key: {{ .Values.nats.caKey }}
+                path: ca.crt
+              {{- end }}
+        {{- end }}
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -7,15 +7,25 @@ NAME := runner
 DEFAULT_K8S_RES := platform-orchestrator-runner
 RUNNER_CONFIGURATION := runner_config.json
 
-compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml
+CP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-cp:v2.0.0
+DP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-dp:v2.0.0
+IAM_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-iam:v2.0.0
+SERVICE_PLATFORM ?=
+
+compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml score.cp.yaml score.dp.yaml score.iam.yaml
 	score-compose check-version '>=0.16.0'
 	score-compose init --no-sample
 	cp score.provisioners.yaml .score-compose/
-	score-compose generate ./score.dp.yaml
-	score-compose generate ./score.cp.yaml
-	score-compose generate ./score.iam.yaml
+	cp score.cp.yaml score.dp.yaml score.iam.yaml .score-compose/
+	yq -i '.containers.platform-orchestrator-cp.image = "$(CP_IMAGE)"' .score-compose/score.cp.yaml
+	yq -i '.containers.platform-orchestrator-dp.image = "$(DP_IMAGE)"' .score-compose/score.dp.yaml
+	yq -i '.containers.platform-orchestrator-iam.image = "$(IAM_IMAGE)"' .score-compose/score.iam.yaml
+	score-compose generate .score-compose/score.dp.yaml
+	score-compose generate .score-compose/score.cp.yaml
+	score-compose generate .score-compose/score.iam.yaml
 	score-compose generate --publish 5432:postgres.default#platform-orchestrator-dp.postgres.host:5432 --publish 8081:platform-orchestrator-cp:8080 --publish 8082:platform-orchestrator-dp:8080 --publish 8083:platform-orchestrator-iam:8080
 	yq eval-all '. as $$item ireduce ({}; . * $$item)' --inplace compose.yaml compose-mixins.yaml
+	if [ -n "$(SERVICE_PLATFORM)" ]; then yq -i '(.services.platform-orchestrator-cp-platform-orchestrator-cp.platform, .services.platform-orchestrator-dp-platform-orchestrator-dp.platform, .services.platform-orchestrator-iam-platform-orchestrator-iam.platform) = "$(SERVICE_PLATFORM)"' compose.yaml; fi
 
 .PHONY: build-platform-orchestrator-runner
 build-platform-orchestrator-runner:
@@ -24,6 +34,7 @@ build-platform-orchestrator-runner:
 	
 .PHONY: build
 build: compose.yaml build-platform-orchestrator-runner
+	docker compose pull
 	docker compose build --pull
 
 .PHONY: test
@@ -47,16 +58,10 @@ write-cluster-config:
 	kind export kubeconfig --name $(NAME) --kubeconfig $(KUBECONFIG)
 	kind export kubeconfig --name $(NAME) --internal --kubeconfig $(KUBECONFIG_INTERNAL)
 
-.PHONY: generate-auth-keys
-generate-auth-keys:
-	openssl genpkey -algorithm ed25519 -out runner-keys/private_key.pem
-	openssl pkey -in runner-keys/private_key.pem -pubout -out runner-keys/public_key.pem
-
 .PHONY: configure-cluster
-configure-cluster: generate-auth-keys
+configure-cluster:
 	$(KUBECTL) delete namespace $(DEFAULT_K8S_RES) --ignore-not-found
 	$(KUBECTL) create namespace $(DEFAULT_K8S_RES)
-	$(KUBECTL) create secret generic private-key-secret --from-file=runner-keys/private_key.pem --namespace=${DEFAULT_K8S_RES}
 	$(KUBECTL) apply -f runner-cluster/config -R
 	echo "$${RUNNER_GIT_SSH_KEYS}" | $(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) runner-git-ssh-keys --from-file=key=/dev/stdin || true
 	$(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) aws-creds --from-literal=access_key_id="FAKE_ACCESS_KEY_ID" --from-literal=secret_access_key="SECRET_ACCESS_KEY"
@@ -66,8 +71,7 @@ configure-cluster: generate-auth-keys
 .PHONY: clean
 clean:
 	if [ -f compose.yaml ]; then docker compose down -v --remove-orphans; fi
-	rm -rfv .score-compose compose.yaml
-	rm -rfv ./runner-keys/private_key.pem ./runner-keys/public_key.pem
+	rm -rfv .kind-e2e .score-compose compose.yaml
 	kind delete cluster --name $(NAME) --kubeconfig $(KUBECONFIG)
 
 .PHONY: test-integration-logs

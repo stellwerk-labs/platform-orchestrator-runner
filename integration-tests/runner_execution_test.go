@@ -1,10 +1,8 @@
 package integrationtests
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"regexp"
 	"slices"
@@ -208,18 +206,13 @@ func TestK8sRunner_Success(t *testing.T) {
 			}
 		}, 30*time.Second, 2*time.Second, "active resource nodes not updates after 30s")
 
-		// Check S3 bucket logs
-		runnerLogsBucketHandle := MustCreateS3BucketHandle(t)
-		logsReader, err := runnerLogsBucketHandle.Object(env.Uuid.String() + "/" + dep.Id.String()).NewReader(ctx)
-		if assert.NoError(t, err) {
-			defer logsReader.Close()
-			var logsBuf bytes.Buffer
-			_, err := io.Copy(&logsBuf, logsReader)
-			require.NoError(t, err)
-
-			decryptedLogs := decryptBytes(t, logsBuf.Bytes(), &logsId)
-			require.Contains(t, decryptedLogs, "deployment results sent successfully")
-		}
+		// Logs are transported through the NATS Object Store and served by the data plane.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			logs, err := poDpClient.GetDeploymentLogsWithResponse(t.Context(), orgId, dep.Id, &platformorchestratorapi.GetDeploymentLogsParams{DecryptKey: ref.Ref(logsId.String())})
+			if assert.NoError(c, err) && assert.Equal(c, http.StatusOK, logs.StatusCode(), string(logs.Body)) {
+				assert.Contains(c, string(logs.Body), "platform-orchestrator runner completed successfully")
+			}
+		}, 30*time.Second, 5*time.Second, "runner logs not available through the data plane after 30s")
 	})
 
 	t.Run("tofu destroy", func(t *testing.T) {

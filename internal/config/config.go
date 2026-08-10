@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"os"
+	"time"
 
 	"filippo.io/age"
 	"github.com/pkg/errors"
@@ -28,26 +29,39 @@ const (
 )
 
 type StandardModeConfiguration struct {
-	LogLevel                      string         `env:"LOG_LEVEL, default=info"`
-	OrgID                         string         `env:"ORG_ID,required"`
-	PlatformOrchestratorApiPrefix string         `env:"PLATFORM_ORCHESTRATOR_API_PREFIX,required"`
-	DeploymentID                  string         `env:"DEPLOYMENT_ID,required"`
-	Token                         string         `env:"TOKEN,required"`
-	Mode                          RunnerMode     `env:"MODE,required"`
-	EncryptingKey                 string         `env:"ENCRYPTING_KEY"`
-	MetadataKey                   string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
-	IaCCodeDir                    string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
-	IaCBackend                    IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
-	EncryptingLogsKey             string         `env:"ENCRYPTING_LOGS_KEY"`
-	LogsUrl                       string         `env:"LOGS_URL"`
+	LogLevel          string         `env:"LOG_LEVEL, default=info"`
+	OrgID             string         `env:"ORG_ID,required"`
+	RunnerID          string         `env:"RUNNER_ID"`
+	DeploymentID      string         `env:"DEPLOYMENT_ID,required"`
+	DeploymentEnvUUID string         `env:"DEPLOYMENT_ENV_UUID"`
+	Mode              RunnerMode     `env:"MODE,required"`
+	EncryptingKey     string         `env:"ENCRYPTING_KEY"`
+	MetadataKey       string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
+	IaCCodeDir        string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
+	IaCBackend        IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
+	EncryptingLogsKey string         `env:"ENCRYPTING_LOGS_KEY"`
+	NATS              NATSConfiguration
 }
 
 type RemoteModeConfiguration struct {
-	LogLevel   string `env:"LOG_LEVEL, default=info"`
-	OrgID      string `env:"ORG_ID,required"`
-	RunnerId   string `env:"RUNNER_ID,required"`
-	PrivateKey string `env:"PRIVATE_KEY,required"`
-	RemoteUrl  string `env:"REMOTE_URL"`
+	LogLevel           string        `env:"LOG_LEVEL, default=info"`
+	OrgID              string        `env:"ORG_ID,required"`
+	RunnerId           string        `env:"RUNNER_ID,required"`
+	PodSchedulingDelay time.Duration `env:"K8S_RUNNER_POD_SCHEDULING_DELAY,default=5m"`
+	NATS               NATSConfiguration
+}
+
+type NATSConfiguration struct {
+	URL              string `env:"NATS_URL"`
+	Token            string `env:"NATS_TOKEN"`
+	CredentialsFile  string `env:"NATS_CREDS_FILE"`
+	CAFile           string `env:"NATS_CA_FILE"`
+	ClientCertFile   string `env:"NATS_CLIENT_CERT_FILE"`
+	ClientKeyFile    string `env:"NATS_CLIENT_KEY_FILE"`
+	OutboxDir        string `env:"NATS_OUTBOX_DIR"`
+	BootstrapStreams bool   `env:"NATS_BOOTSTRAP_STREAMS,default=false"`
+	BundleBucket     string `env:"NATS_BUNDLE_BUCKET,default=PO_RUNNER_BUNDLES"`
+	BundleKey        string `env:"NATS_BUNDLE_KEY"`
 }
 
 func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
@@ -73,6 +87,9 @@ func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
 	if err := validate.Struct(conf); err != nil {
 		return nil, err
 	}
+	if conf.NATS.URL == "" {
+		return nil, errors.New("NATS_URL is required")
+	}
 
 	if err := validateMode(conf.Mode); err != nil {
 		return nil, err
@@ -95,7 +112,7 @@ func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
 	return conf, nil
 }
 
-func GetRemoteModeConfiguration() (*RemoteModeConfiguration, error) {
+func GetRemoteModeConfiguration(natsURLOverrides ...string) (*RemoteModeConfiguration, error) {
 	conf := &RemoteModeConfiguration{}
 
 	ctx := context.Background()
@@ -107,10 +124,16 @@ func GetRemoteModeConfiguration() (*RemoteModeConfiguration, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if len(natsURLOverrides) > 0 && natsURLOverrides[0] != "" {
+		conf.NATS.URL = natsURLOverrides[0]
+	}
 
 	validate := validator.New()
 	if err := validate.Struct(conf); err != nil {
 		return nil, err
+	}
+	if conf.NATS.URL == "" {
+		return nil, errors.New("NATS_URL is required")
 	}
 
 	return conf, nil

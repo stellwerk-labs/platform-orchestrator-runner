@@ -12,7 +12,6 @@ output-options:
     - updateDeploymentResults
     - getDeployment
     - listActiveResourceNodes
-    - waitForRemoteRunnerMessages
     - waitForDeploymentComplete
     - getDeploymentEncryptedOutputs
 output: client.gen.go
