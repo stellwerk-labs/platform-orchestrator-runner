@@ -3,10 +3,13 @@ package integrationtests
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -344,15 +347,19 @@ func MustCreateK8sRunnerWithIaCBackend(t *testing.T, cpClient platformorchestrat
 }
 
 func MustCreateRemoteRunnerWithRule(t *testing.T, cpClient platformorchestratorcp.ClientWithResponsesInterface, orgId, runnerId, projectId, namespace, serviceaccount string) *platformorchestratorcp.Runner {
-	publickKey, err := os.ReadFile("runner-keys/public_key.pem")
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	publicKeyDER, err := x509.MarshalPKIXPublicKey(publicKey)
+	require.NoError(t, err)
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyDER})
+	require.NotEmpty(t, publicKeyPEM)
 	cfg := new(platformorchestratorcp.RunnerConfiguration)
 	require.NoError(t, cfg.FromK8sAgentRunnerConfiguration(platformorchestratorcp.K8sAgentRunnerConfiguration{
 		Job: platformorchestratorcp.K8sRunnerJobConfig{
 			Namespace:      namespace,
 			ServiceAccount: serviceaccount,
 		},
-		Key:  string(publickKey),
+		Key:  string(publicKeyPEM),
 		Type: platformorchestratorcp.RunnerTypeKubernetesAgent,
 	}))
 	var ssc = new(platformorchestratorcp.StateStorageConfiguration)

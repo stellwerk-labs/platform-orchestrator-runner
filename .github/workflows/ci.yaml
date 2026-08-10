@@ -51,6 +51,10 @@ jobs:
 
   test-integration:
     runs-on: ubuntu-latest
+    env:
+      CP_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-cp:nats-candidate
+      DP_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-dp:nats-candidate
+      IAM_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-iam:nats-candidate
     permissions:
       contents: "read"
       id-token: "write"
@@ -138,6 +142,11 @@ jobs:
       uses: azure/setup-helm@v5
       with:
         version: '3.12.0'
+
+    - name: Build chart dependencies
+      run: |
+        helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+        helm dependency build ./charts/platform-orchestrator-kubernetes-agent-runner
         
     - name: Helm Lint
       run: |

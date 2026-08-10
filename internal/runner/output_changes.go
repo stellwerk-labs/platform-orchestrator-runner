@@ -14,12 +14,14 @@ type OutputChange struct {
 
 func (oc OutputChange) Compact() interface{} {
 	if len(oc.Actions) > 0 {
-		if oc.Actions[0] == "no-op" {
+		switch oc.Actions[0] {
+		case "no-op":
 			return oc.After
-		} else if oc.Actions[0] == "delete" {
+		case "delete":
 			return nil
+		default:
+			return compactUnknowns(oc.After, oc.AfterUnknown)
 		}
-		return compactUnknowns(oc.After, oc.AfterUnknown)
 	}
 	return "(known after apply)"
 }

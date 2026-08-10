@@ -1,0 +1,128 @@
+{{- if .Values.diode.enabled }}
+{{- if not (has .Values.diode.role (list "central" "protected")) }}{{ fail "diode.role must be central or protected" }}{{ end }}
+{{- if not .Values.diode.existingClaim }}{{ fail "diode.existingClaim is required when diode.enabled=true" }}{{ end }}
+{{- if not .Values.diode.signingKeyExistingSecret }}{{ fail "diode.signingKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
+{{- if not .Values.diode.verificationKeyExistingSecret }}{{ fail "diode.verificationKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
+{{- if and (eq .Values.diode.role "central") (not .Values.diode.commandSubject) }}{{ fail "diode.commandSubject must be the exact airgap runner command subject when diode.role=central" }}{{ end }}
+{{- $natsURL := .Values.nats.url }}
+{{- if and (eq .Values.diode.role "protected") (index .Values "protected-nats" "enabled") (not $natsURL) }}
+{{- $natsURL = printf "nats://%s-protected-nats:4222" .Release.Name }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-diode-{{ .Values.diode.role }}
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: diode-{{ .Values.diode.role }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: diode-{{ .Values.diode.role }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: diode-{{ .Values.diode.role }}
+    spec:
+      serviceAccountName: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        {{- if eq .Values.diode.role "protected" }}
+        - name: forward-importer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/opt/runner/runner"]
+          args: ["diode-import"]
+          env:
+            - {name: NATS_URL, value: {{ $natsURL | quote }}}
+            - {name: NATS_BUNDLE_BUCKET, value: "PO_RUNNER_BUNDLES"}
+            - {name: DIODE_INPUT_DIR, value: /diode/forward/in}
+            - {name: DIODE_PROCESSED_DIR, value: /diode/forward/processed}
+            - {name: DIODE_QUARANTINE_DIR, value: /diode/forward/quarantine}
+            - {name: DIODE_LEDGER_PATH, value: /diode/forward/imported.ledger}
+            - {name: DIODE_VERIFY_KEY_FILE, value: /keys/verify/key.pem}
+            - {name: DIODE_EXPECT_ATTACHMENT, value: bundle}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+          {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
+        - name: reverse-event-exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/opt/runner/runner"]
+          args: ["diode-export"]
+          env:
+            - {name: NATS_URL, value: {{ $natsURL | quote }}}
+            - {name: DIODE_STREAM, value: PO_RUNNER_EVENTS}
+            - {name: DIODE_SUBJECT, value: {{ printf "po.v1.orgs.%s.runners.%s.events.>" .Values.platformOrchestrator.orgId .Values.platformOrchestrator.runnerId | quote }} }
+            - {name: DIODE_DURABLE, value: diode-reverse-events}
+            - {name: DIODE_OUTPUT_DIR, value: /diode/reverse/out}
+            - {name: DIODE_LEDGER_PATH, value: /diode/reverse/events.ledger}
+            - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
+            - {name: DIODE_ATTACH_OBJECT, value: log}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+          {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
+        {{- else }}
+        - name: forward-command-exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/opt/runner/runner"]
+          args: ["diode-export"]
+          env:
+            - {name: NATS_URL, value: {{ $natsURL | quote }}}
+            - {name: DIODE_STREAM, value: PO_RUNNER_COMMANDS}
+            - {name: DIODE_SUBJECT, value: {{ .Values.diode.commandSubject | quote }} }
+            - {name: DIODE_DURABLE, value: diode-forward-commands}
+            - {name: DIODE_OUTPUT_DIR, value: /diode/forward/out}
+            - {name: DIODE_LEDGER_PATH, value: /diode/forward/commands.ledger}
+            - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
+            - {name: DIODE_ATTACH_OBJECT, value: bundle}
+            - {name: NATS_BUNDLE_BUCKET, value: PO_RUNNER_BUNDLES}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+          {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
+        - name: reverse-importer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/opt/runner/runner"]
+          args: ["diode-import"]
+          env:
+            - {name: NATS_URL, value: {{ $natsURL | quote }}}
+            - {name: DIODE_INPUT_DIR, value: /diode/reverse/in}
+            - {name: DIODE_PROCESSED_DIR, value: /diode/reverse/processed}
+            - {name: DIODE_QUARANTINE_DIR, value: /diode/reverse/quarantine}
+            - {name: DIODE_LEDGER_PATH, value: /diode/reverse/imported.ledger}
+            - {name: DIODE_VERIFY_KEY_FILE, value: /keys/verify/key.pem}
+            - {name: DIODE_EXPECT_ATTACHMENT, value: log}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+          {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
+        {{- end }}
+      volumes:
+        - name: diode
+          persistentVolumeClaim:
+            claimName: {{ .Values.diode.existingClaim }}
+        - name: signing-key
+          secret:
+            secretName: {{ .Values.diode.signingKeyExistingSecret }}
+            items:
+              - key: {{ .Values.diode.signingKey }}
+                path: key.pem
+        - name: verification-key
+          secret:
+            secretName: {{ .Values.diode.verificationKeyExistingSecret }}
+            items:
+              - key: {{ .Values.diode.verificationKey }}
+                path: key.pem
+        {{- if or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled }}
+        - name: nats-auth
+          secret:
+            secretName: {{ required "nats.existingSecret is required for diode credentials/CA" .Values.nats.existingSecret }}
+            items:
+              {{- if eq .Values.nats.authType "credentials" }}
+              - key: {{ .Values.nats.credentialsKey }}
+                path: creds
+              {{- end }}
+              {{- if .Values.nats.caEnabled }}
+              - key: {{ .Values.nats.caKey }}
+                path: ca.crt
+              {{- end }}
+        {{- end }}
+{{- end }}

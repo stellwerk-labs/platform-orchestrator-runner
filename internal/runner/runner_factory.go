@@ -2,14 +2,12 @@ package runner
 
 import (
 	"context"
-	"net/http"
+	"fmt"
 
 	"filippo.io/age"
-	"github.com/pkg/errors"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/utils"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 )
 
 // RunnerFactory is a function that constructs a RunnerInterface from configuration.
@@ -17,26 +15,41 @@ type RunnerFactory func(ctx context.Context, cfg *config.StandardModeConfigurati
 
 // CreateRunner builds the appropriate RunnerInterface based on cfg.TFBackend.
 func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (RunnerInterface, error) {
-	apiClient, err := platformorchestratorapi.NewClientWithResponses(
-		cfg.PlatformOrchestratorApiPrefix,
-		platformorchestratorapi.WithHTTPClient(utils.WrapHttpClientWithRetries(http.DefaultClient)),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to initialize api client")
-	}
-
 	var recipient age.Recipient
 	if cfg.EncryptingKey != "" {
 		recipient, _ = age.ParseX25519Recipient(cfg.EncryptingKey)
 	}
 
 	base := &baseRunner{
-		apiClient:    apiClient,
 		orgID:        cfg.OrgID,
 		deploymentID: cfg.DeploymentID,
-		token:        cfg.Token,
 		folder:       cfg.IaCCodeDir,
 		recipient:    recipient,
+	}
+	bucket := cfg.NATS.BundleBucket
+	key := cfg.NATS.BundleKey
+	if key == "" {
+		key = cfg.OrgID + "/" + cfg.DeploymentID
+	}
+	base.bundleLoader = func(ctx context.Context) ([]byte, error) {
+		connection, err := natstransport.Connect(natstransport.Config{
+			URL: cfg.NATS.URL, Token: cfg.NATS.Token, CredentialsFile: cfg.NATS.CredentialsFile,
+			CAFile: cfg.NATS.CAFile, ClientCertFile: cfg.NATS.ClientCertFile,
+			ClientKeyFile: cfg.NATS.ClientKeyFile, Name: "platform-orchestrator-bundle/" + cfg.DeploymentID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer connection.Close()
+		js, err := connection.JetStream()
+		if err != nil {
+			return nil, err
+		}
+		store, err := js.ObjectStore(bucket)
+		if err != nil {
+			return nil, fmt.Errorf("open pre-provisioned bundle Object Store %s: %w", bucket, err)
+		}
+		return store.GetBytes(key)
 	}
 
 	switch cfg.IaCBackend {

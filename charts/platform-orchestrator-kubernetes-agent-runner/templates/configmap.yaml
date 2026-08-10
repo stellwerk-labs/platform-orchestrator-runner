@@ -9,3 +9,20 @@ data:
   ORG_ID: {{ .Values.platformOrchestrator.orgId | quote }}
   RUNNER_ID: {{ .Values.platformOrchestrator.runnerId | quote }}
   LOG_LEVEL: {{ .Values.platformOrchestrator.logLevel | quote }}
+  {{- if and (eq .Values.nats.mode "airgap") (index .Values "protected-nats" "enabled") (not .Values.nats.url) }}
+  NATS_URL: {{ printf "nats://%s-protected-nats:4222" .Release.Name | quote }}
+  {{- else }}
+  NATS_URL: {{ .Values.nats.url | quote }}
+  {{- end }}
+  NATS_RUNNER_MODE: {{ .Values.nats.mode | quote }}
+  NATS_OUTBOX_DIR: "/var/lib/platform-orchestrator-runner/outbox"
+  NATS_JOB_CREDENTIALS_SECRET: {{ default (printf "%s-nats-job" (include "platform-orchestrator-kubernetes-agent-runner.fullname" .)) .Values.nats.jobCredentialsExistingSecret | quote }}
+  NATS_JOB_TOKEN_KEY: {{ .Values.nats.tokenKey | quote }}
+  NATS_JOB_AUTH_TYPE: {{ .Values.nats.authType | quote }}
+  NATS_JOB_CREDENTIALS_KEY: {{ .Values.nats.credentialsKey | quote }}
+  NATS_JOB_CA_KEY: {{ .Values.nats.caKey | quote }}
+  NATS_JOB_CA_ENABLED: {{ .Values.nats.caEnabled | quote }}
+  {{- if .Values.outbox.enabled }}
+  NATS_JOB_OUTBOX_PVC: {{ printf "%s-job-outbox" (include "platform-orchestrator-kubernetes-agent-runner.fullname" .) | quote }}
+  {{- end }}
+  NATS_BUNDLE_BUCKET: "PO_RUNNER_BUNDLES"

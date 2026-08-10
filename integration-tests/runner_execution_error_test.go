@@ -1,12 +1,10 @@
 package integrationtests
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -107,18 +105,11 @@ func TestMissingOutputsError(t *testing.T) {
 		}
 	}, 2*time.Minute, 5*time.Second, "deployment not marked as completed after 2m")
 
-	// Check S3 bucket logs
-	runnerLogsBucketHandle := MustCreateS3BucketHandle(t)
+	// Logs are transported through the NATS Object Store and served by the data plane.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		logsReader, err := runnerLogsBucketHandle.Object(env.Uuid.String() + "/" + dep.Id.String()).NewReader(ctx)
-		if assert.NoError(c, err) {
-			defer logsReader.Close()
-			var logsBuf bytes.Buffer
-			_, err := io.Copy(&logsBuf, logsReader)
-			require.NoError(c, err)
-
-			decryptedLogs := decryptBytes(t, logsBuf.Bytes(), &logsId)
-			require.Contains(t, decryptedLogs, "\"@message\":\"Error: Unsupported attribute\"")
+		logs, err := poDpClient.GetDeploymentLogsWithResponse(t.Context(), orgId, dep.Id, &platformorchestratorapi.GetDeploymentLogsParams{DecryptKey: ref.Ref(logsId.String())})
+		if assert.NoError(c, err) && assert.Equal(c, http.StatusOK, logs.StatusCode(), string(logs.Body)) {
+			assert.Contains(c, string(logs.Body), "\"@message\":\"Error: Unsupported attribute\"")
 		}
 	}, 30*time.Second, 5*time.Second, "runner logs not found after 30s")
 }
@@ -313,18 +304,10 @@ output "name" {
 		}
 	}, 2*time.Minute, 5*time.Second, "deployment not marked as completed after 2m")
 
-	// Check S3 bucket logs
-	runnerLogsBucketHandle := MustCreateS3BucketHandle(t)
-	logsReader, err := runnerLogsBucketHandle.Object(env.Uuid.String() + "/" + dep.Id.String()).NewReader(ctx)
-	if assert.NoError(t, err) {
-		defer logsReader.Close()
-		var logsBuf bytes.Buffer
-		_, err := io.Copy(&logsBuf, logsReader)
-		require.NoError(t, err)
-
-		decryptedLogs := decryptBytes(t, logsBuf.Bytes(), &logsId)
-		require.Contains(t, decryptedLogs, "\"@message\":\"Error: Missing required argument\"")
-	}
+	logs, err := poDpClient.GetDeploymentLogsWithResponse(t.Context(), orgId, dep.Id, &platformorchestratorapi.GetDeploymentLogsParams{DecryptKey: ref.Ref(logsId.String())})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, logs.StatusCode(), string(logs.Body))
+	require.Contains(t, string(logs.Body), "\"@message\":\"Error: Missing required argument\"")
 }
 
 func TestModuleError_BadIndex(t *testing.T) {

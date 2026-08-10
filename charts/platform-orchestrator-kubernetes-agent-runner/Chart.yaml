@@ -2,5 +2,12 @@ apiVersion: v2
 name: platform-orchestrator-kubernetes-agent-runner
 description: A Helm chart for the Platform Orchestrator Kubernetes Agent Runner
 type: application
-version: 0.1.1
-appVersion: "v1.0.0"
+version: 0.2.0
+appVersion: "v2.0.0"
+
+dependencies:
+  - name: nats
+    alias: protected-nats
+    version: "2.14.0"
+    repository: "https://nats-io.github.io/k8s/helm/charts/"
+    condition: protected-nats.enabled

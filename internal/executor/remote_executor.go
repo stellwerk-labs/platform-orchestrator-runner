@@ -3,21 +3,19 @@ package executor
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/ref"
+	"github.com/nats-io/nats.go"
+	"github.com/stellwerk-labs/golib/hmessaging"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 
 	"github.com/pkg/errors"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/kubernetesjob"
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/utils"
 
 	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,15 +27,10 @@ import (
 
 var ErrConflict = errors.New("Message already handled")
 
-// ExecuteRemoteMode executes the remote mode with long polling and k8s job triggering
-func ExecuteRemoteMode(ctx context.Context, cfg *config.RemoteModeConfiguration, apiClient *platformorchestratorapi.ClientWithResponses, programLevel *slog.LevelVar) error {
+// ExecuteRemoteMode consumes durable runner commands and creates Kubernetes Jobs.
+func ExecuteRemoteMode(ctx context.Context, cfg *config.RemoteModeConfiguration, programLevel *slog.LevelVar) error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel})).
 		With(slog.String("runnerId", cfg.RunnerId)))
-
-	signedJwtToken, err := signJWT([]byte(cfg.PrivateKey), cfg.OrgID, cfg.RunnerId)
-	if err != nil {
-		return errors.Wrap(err, "failed to sign JWT token")
-	}
 
 	var k8sClient *kubernetes.Clientset
 	if config, err := rest.InClusterConfig(); err != nil {
@@ -48,128 +41,380 @@ func ExecuteRemoteMode(ctx context.Context, cfg *config.RemoteModeConfiguration,
 		}
 	}
 
-	var message platformorchestratorapi.RemoteRunnerMessage
+	connection, err := natstransport.Connect(natstransport.Config{
+		URL: cfg.NATS.URL, Token: cfg.NATS.Token, CredentialsFile: cfg.NATS.CredentialsFile,
+		CAFile: cfg.NATS.CAFile, ClientCertFile: cfg.NATS.ClientCertFile,
+		ClientKeyFile: cfg.NATS.ClientKeyFile, OutboxDir: cfg.NATS.OutboxDir,
+		Name: "platform-orchestrator-runner/" + cfg.RunnerId,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to connect to NATS")
+	}
+	defer connection.Close()
+	publisher, err := natstransport.NewPublisher(connection, cfg.NATS.OutboxDir)
+	if err != nil {
+		return err
+	}
+	consumer, err := natstransport.NewRunnerConsumer(connection, cfg.OrgID, cfg.RunnerId, cfg.NATS.BootstrapStreams)
+	if err != nil {
+		return err
+	}
+	jobs := kubernetesjob.NewK8sJobsClient(k8sClient)
+	flushTicker := time.NewTicker(5 * time.Second)
+	defer flushTicker.Stop()
 	for {
-		if res, err := apiClient.WaitForRemoteRunnerMessagesWithResponse(ctx, cfg.OrgID, cfg.RunnerId, func(ctx context.Context, req *http.Request) error {
-			req.Header.Set("Authorization", "JWT "+signedJwtToken)
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "failed to connect to api to wait for remote runner messages")
-		} else if res.StatusCode() == http.StatusOK {
-			message = *res.JSON200
-			if deploymentId, token, err := handleJobMessage(ctx, message, kubernetesjob.NewK8sJobsClient(k8sClient)); err != nil && !errors.Is(err, ErrConflict) {
-				slog.ErrorContext(ctx, "failed to handle job message", "err", err)
-				if deploymentId != "" && token != "" {
-					if err := utils.SendResultsToApi(ctx, apiClient, cfg.OrgID, deploymentId, token, platformorchestratorapi.DeploymentResultsUpdateBody{
-						Status: platformorchestratorapi.Failure,
-						Error: &platformorchestratorapi.Error{
-							Error:   "REMOTE_RUNNER",
-							Message: err.Error(),
-						},
-					}); err != nil {
-						slog.ErrorContext(ctx, "[PLATFORM_ORCHESTRATOR]update-results", "err", err)
-					}
-				}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-flushTicker.C:
+			if err := publisher.Flush(ctx); err != nil {
+				slog.WarnContext(ctx, "failed to flush NATS outbound spool", "err", err)
 			}
-			continue
-		} else if res.StatusCode() == http.StatusNoContent {
-			slog.DebugContext(ctx, "No messages received, waiting for next message")
-			continue
-		} else {
-			// TODO: Instead of simply returning an error, we should send a failure message back to the api
-			return errors.Errorf("unexpected status code %d when waiting for messages for remote runner: %s", res.StatusCode(), string(res.Body))
+			if err := natstransport.FlushLogObjects(ctx, connection, cfg.NATS.OutboxDir); err != nil {
+				slog.WarnContext(ctx, "failed to flush NATS log object spool", "err", err)
+			}
+		default:
+		}
+		delivery, err := consumer.Fetch(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			if errors.Is(err, nats.ErrTimeout) {
+				continue
+			}
+			return errors.Wrap(err, "fetch runner command")
+		}
+		if err := executeCommand(ctx, cfg, publisher, jobs, delivery); err != nil {
+			slog.ErrorContext(ctx, "failed to execute runner command", "err", err, "message_id", delivery.Message.ID, "attempt", delivery.Attempts)
 		}
 	}
 }
 
-func handleJobMessage(ctx context.Context, message platformorchestratorapi.RemoteRunnerMessage, k8sClient kubernetesjob.K8sJobsClientInterface) (string, string, error) {
-	messageByAction, _ := message.ValueByDiscriminator()
-	switch typed := messageByAction.(type) {
-	case platformorchestratorapi.RemoteRunnerMessageCreateJob:
-		slog.InfoContext(ctx, "Received message to create a job", "jobId", typed.JobId, "namespace", typed.Namespace)
-		jobSpecJson, _ := json.Marshal(typed.Configuration)
-		var jobSpec v1.JobSpec
-		if err := json.Unmarshal(jobSpecJson, &jobSpec); err != nil {
-			return "", "", errors.Wrap(err, "failed to unmarshal job spec")
+func executeCommand(ctx context.Context, cfg *config.RemoteModeConfiguration, publisher *natstransport.Publisher, jobs kubernetesjob.K8sJobsClientInterface, delivery natstransport.Delivery) error {
+	var envelope hmessaging.CommandEnvelope
+	if err := json.Unmarshal(delivery.Message.Data, &envelope); err != nil {
+		return deadLetter(ctx, publisher, delivery, errors.Wrap(err, "decode command envelope"))
+	}
+	if envelope.ProtocolVersion != hmessaging.ProtocolVersionV1 || envelope.OrganizationID != cfg.OrgID || envelope.RunnerID != cfg.RunnerId {
+		return deadLetter(ctx, publisher, delivery, errors.New("command envelope identity or protocol version does not match this runner"))
+	}
+	if !envelope.ExpiresAt.IsZero() && time.Now().After(envelope.ExpiresAt) {
+		_ = publishRunnerError(ctx, publisher, envelope, "COMMAND_EXPIRED", "command expired before execution", false)
+		return deadLetter(ctx, publisher, delivery, errors.New("command expired before execution"))
+	}
+	if envelope.Type != hmessaging.CommandTypeCreateJob {
+		return deadLetter(ctx, publisher, delivery, errors.Errorf("unsupported runner command type %q", envelope.Type))
+	}
+	var command hmessaging.CreateJobCommand
+	if err := json.Unmarshal(envelope.Payload, &command); err != nil {
+		return deadLetter(ctx, publisher, delivery, errors.Wrap(err, "decode command payload"))
+	}
+	err := handleCreateJob(ctx, command, jobs, cfg)
+	if errors.Is(err, ErrConflict) {
+		err = nil
+	}
+	if err != nil {
+		if isPermanentJobCreationError(err) {
+			_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), false)
+			return deadLetter(ctx, publisher, delivery, err)
 		}
-		if _, err := k8sClient.CreateJob(ctx, typed.Namespace, &v1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      typed.JobId,
-				Namespace: typed.Namespace,
-			},
-			Spec: jobSpec,
-		}); err != nil {
-			if k8serrors.IsAlreadyExists(err) {
-				slog.InfoContext(ctx, "Job already exists, skipping creation", "jobId", typed.JobId, "namespace", typed.Namespace)
-				return "", "", ErrConflict
-			}
-			return typed.JobId, typed.DeploymentToken, errors.Wrap(err, "failed to create job")
-		} else {
-			slog.InfoContext(ctx, "Job created successfully", "jobId", typed.JobId, "namespace", typed.Namespace)
-			return typed.JobId, typed.DeploymentToken, nil
+		if delivery.Attempts >= defaultCommandDeliveries {
+			_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), false)
+			return deadLetter(ctx, publisher, delivery, err)
 		}
+		_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), true)
+		_ = delivery.Nak(retryDelay(delivery.Attempts))
+		return err
+	}
+	payload, _ := json.Marshal(map[string]string{"job_id": command.JobID, "namespace": command.Namespace})
+	if err := publishEvent(ctx, publisher, envelope, "job-created", payload); err != nil {
+		_ = delivery.Nak(retryDelay(delivery.Attempts))
+		return err
+	}
+	if err := delivery.Ack(); err != nil {
+		return err
+	}
+	go monitorJobScheduling(ctx, cfg, publisher, jobs, envelope, command)
+	return nil
+}
 
-	case platformorchestratorapi.RemoteRunnerMessageCheckJobStatus:
-		slog.InfoContext(ctx, "Received message to get job status", "jobId", typed.JobId, "namespace", typed.Namespace, "expiresAt", typed.ExpiresAt)
-		jobStatus, err := k8sClient.CheckJobStatus(ctx, typed.Namespace, typed.JobId)
+const (
+	jobSchedulingMonitorInterval = 5 * time.Second
+	jobSchedulingMonitorTimeout  = time.Hour
+)
+
+func monitorJobScheduling(
+	ctx context.Context,
+	cfg *config.RemoteModeConfiguration,
+	publisher *natstransport.Publisher,
+	jobs kubernetesjob.K8sJobsClientInterface,
+	envelope hmessaging.CommandEnvelope,
+	command hmessaging.CreateJobCommand,
+) {
+	delay := cfg.PodSchedulingDelay
+	if delay <= 0 {
+		delay = 5 * time.Minute
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+
+	ticker := time.NewTicker(jobSchedulingMonitorInterval)
+	defer ticker.Stop()
+	timeout := time.NewTimer(jobSchedulingMonitorTimeout)
+	defer timeout.Stop()
+	for {
+		message, done, err := jobSchedulingState(ctx, jobs, command.Namespace, command.JobID)
 		if err != nil {
-			if errors.Is(err, kubernetesjob.ErrNotFound) {
-				if typed.ExpiresAt.Before(time.Now()) {
-					return typed.JobId, typed.DeploymentToken, errors.New("job not found after the expiration time")
+			slog.WarnContext(ctx, "failed to inspect runner job scheduling", "job_id", command.JobID, "err", err)
+		} else if done {
+			if message != "" {
+				if err := publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", message, false); err != nil {
+					slog.WarnContext(ctx, "failed to publish runner job scheduling error", "job_id", command.JobID, "err", err)
 				} else {
-					return "", "", nil
+					return
 				}
-			}
-			return typed.JobId, typed.DeploymentToken, errors.Wrap(err, "failed to check job status")
-		}
-
-		if jobStatus.Failed > 0 || jobStatus.Succeeded > 0 {
-			slog.InfoContext(ctx, "Job has completed", "jobId", typed.JobId, "namespace", typed.Namespace, "status", jobStatus)
-			return "", "", nil
-		}
-
-		var podNotReady bool
-		var objectToFetchEventsAbout = typed.JobId
-		if jobStatus.Active > 0 && ref.DeRefOr(jobStatus.Ready, 0) == 0 {
-			if podJob, err := k8sClient.GetPodJob(ctx, typed.Namespace, typed.JobId); err != nil {
-				if errors.Is(err, kubernetesjob.ErrNotFound) {
-					podNotReady = true
-				} else if errors.Is(err, kubernetesjob.ErrK8sActionForbidden) {
-					slog.InfoContext(ctx, "forbidden to get pod info", "jobId", typed.JobId, "namespace", typed.Namespace)
-					return "", "", nil
-				} else {
-					return typed.JobId, typed.DeploymentToken, errors.Wrap(err, "failed to check pod job status")
-				}
-			} else if podJob != nil && (podJob.Status.Phase == corev1.PodPending || podJob.Status.Phase == corev1.PodUnknown) {
-				podNotReady = true
-				objectToFetchEventsAbout = podJob.Name
+			} else {
+				return
 			}
 		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-timeout.C:
+			slog.WarnContext(ctx, "stopped monitoring runner job scheduling after timeout", "job_id", command.JobID)
+			return
+		case <-ticker.C:
+		}
+	}
+}
 
-		if (jobStatus.Active == 0 && jobStatus.Failed == 0 && jobStatus.Succeeded == 0) || podNotReady {
-			// Job is not found or not started yet
-			// we must introduce a delay before considering it stuck as we experienced some system can take long time to schedule the job
-			if typed.ExpiresAt.Before(time.Now()) {
-				var message string
-				// Job or pod has not started for a long time, we should consider it stuck and parse the reason from the events
-				if warningEvents, err := k8sClient.GetObjectWarningEvents(ctx, typed.Namespace, objectToFetchEventsAbout); err != nil {
-					if errors.Is(err, kubernetesjob.ErrK8sActionForbidden) {
-						message = "job has not started and the runner configuration does not allow to read job events and pods in the target namespace, please check the runner configuration"
-					} else {
-						message = fmt.Sprintf("job has not started and failed to get job warning events: %v", err)
-					}
-				} else {
-					if len(warningEvents) == 0 {
-						message = "job has not started and there are no warning events for the job or its pod"
-					} else {
-						message = strings.Join(warningEvents, "/n")
-					}
+func jobSchedulingState(ctx context.Context, jobs kubernetesjob.K8sJobsClientInterface, namespace, jobID string) (message string, done bool, err error) {
+	status, err := jobs.CheckJobStatus(ctx, namespace, jobID)
+	if err != nil {
+		return "", false, err
+	}
+	if status.Succeeded > 0 || status.Failed > 0 || (status.Ready != nil && *status.Ready > 0) {
+		return "", true, nil
+	}
+
+	objectName := jobID
+	pod, podErr := jobs.GetPodJob(ctx, namespace, jobID)
+	if podErr == nil {
+		if pod.Status.Phase != corev1.PodPending && pod.Status.Phase != corev1.PodUnknown {
+			return "", true, nil
+		}
+		objectName = pod.Name
+	} else if !errors.Is(podErr, kubernetesjob.ErrNotFound) {
+		return "", false, podErr
+	}
+
+	warnings, err := jobs.GetObjectWarningEvents(ctx, namespace, objectName)
+	if err != nil {
+		return "", false, err
+	}
+	if len(warnings) == 0 {
+		return "", false, nil
+	}
+	return strings.Join(warnings, "\n"), true, nil
+}
+
+func isPermanentJobCreationError(err error) bool {
+	return k8serrors.IsBadRequest(err) ||
+		k8serrors.IsForbidden(err) ||
+		k8serrors.IsInvalid(err) ||
+		k8serrors.IsNotFound(err) ||
+		k8serrors.IsUnauthorized(err)
+}
+
+func deadLetter(ctx context.Context, publisher *natstransport.Publisher, delivery natstransport.Delivery, cause error) error {
+	subject, err := hmessaging.DeadLetterSubject(delivery.Message.Subject)
+	if err != nil {
+		_ = delivery.Nak(time.Second)
+		return errors.Wrap(err, "build dead-letter subject")
+	}
+	header := delivery.Message.Header.Clone()
+	if header == nil {
+		header = hmessaging.Header{}
+	}
+	header.Set("Po-Dead-Letter-Reason", cause.Error())
+	dlq := delivery.Message.Clone()
+	dlq.ID += ":dlq"
+	dlq.Subject = subject
+	dlq.Header = header
+	dlq.ExpiresAt = time.Time{}
+	if err := publisher.Publish(context.WithoutCancel(ctx), dlq); err != nil {
+		_ = delivery.Nak(time.Second)
+		return errors.Wrap(err, "publish dead-letter message")
+	}
+	if err := delivery.Term(); err != nil {
+		return errors.Wrap(err, "terminate dead-lettered command")
+	}
+	return cause
+}
+
+const defaultCommandDeliveries = 10
+
+func retryDelay(attempt uint64) time.Duration {
+	if attempt > 6 {
+		attempt = 6
+	}
+	return time.Duration(1<<attempt) * time.Second
+}
+
+func publishEvent(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, eventType string, payload []byte) error {
+	subject, err := hmessaging.RunnerEventSubject(command.OrganizationID, command.RunnerID, eventType)
+	if err != nil {
+		return err
+	}
+	event := hmessaging.EventEnvelope{
+		ProtocolVersion: hmessaging.ProtocolVersionV1,
+		EventID:         command.CommandID + ":" + eventType, CommandID: command.CommandID,
+		OrganizationID: command.OrganizationID, RunnerID: command.RunnerID,
+		DeploymentID: command.DeploymentID, Type: eventType, CreatedAt: time.Now().UTC(), Payload: payload,
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return publisher.Publish(ctx, hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: event.CreatedAt})
+}
+
+func publishRunnerError(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, code, message string, retryable bool) error {
+	payload, _ := json.Marshal(map[string]interface{}{"job_id": command.DeploymentID, "code": code, "message": message, "retryable": retryable})
+	eventType := "runner-error-terminal"
+	if retryable {
+		eventType = "runner-error-retryable"
+	}
+	return publishEventAs(ctx, publisher, command, "runner-error", eventType, payload)
+}
+
+func publishEventAs(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, eventType, eventIDSuffix string, payload []byte) error {
+	subject, err := hmessaging.RunnerEventSubject(command.OrganizationID, command.RunnerID, eventType)
+	if err != nil {
+		return err
+	}
+	event := hmessaging.EventEnvelope{
+		ProtocolVersion: hmessaging.ProtocolVersionV1,
+		EventID:         command.CommandID + ":" + eventIDSuffix, CommandID: command.CommandID,
+		OrganizationID: command.OrganizationID, RunnerID: command.RunnerID,
+		DeploymentID: command.DeploymentID, Type: eventType, CreatedAt: time.Now().UTC(), Payload: payload,
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return publisher.Publish(ctx, hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: event.CreatedAt})
+}
+
+func handleCreateJob(ctx context.Context, command hmessaging.CreateJobCommand, k8sClient kubernetesjob.K8sJobsClientInterface, cfg *config.RemoteModeConfiguration) error {
+	if command.JobID == "" || command.Namespace == "" || command.Configuration == nil {
+		return errors.New("create-job command requires job_id, namespace, and configuration")
+	}
+	slog.InfoContext(ctx, "received command to create a job", "job_id", command.JobID, "namespace", command.Namespace)
+	jobSpecJSON, err := json.Marshal(command.Configuration)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal job spec")
+	}
+	var jobSpec v1.JobSpec
+	if err := json.Unmarshal(jobSpecJSON, &jobSpec); err != nil {
+		return errors.Wrap(err, "failed to unmarshal job spec")
+	}
+	injectJobNATSConfiguration(&jobSpec, cfg)
+	if _, err := k8sClient.CreateJob(ctx, command.Namespace, &v1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: command.JobID, Namespace: command.Namespace},
+		Spec:       jobSpec,
+	}); err != nil {
+		if k8serrors.IsAlreadyExists(err) {
+			slog.InfoContext(ctx, "job already exists, skipping creation", "job_id", command.JobID, "namespace", command.Namespace)
+			return ErrConflict
+		}
+		return errors.Wrap(err, "failed to create job")
+	}
+	slog.InfoContext(ctx, "job created successfully", "job_id", command.JobID, "namespace", command.Namespace)
+	return nil
+}
+
+func injectJobNATSConfiguration(jobSpec *v1.JobSpec, cfg *config.RemoteModeConfiguration) {
+	url := cfg.NATS.URL
+	if url == "" {
+		return
+	}
+	common := []corev1.EnvVar{
+		{Name: "NATS_URL", Value: url},
+		{Name: "ORG_ID", Value: cfg.OrgID},
+		{Name: "RUNNER_ID", Value: cfg.RunnerId},
+	}
+	outboxPVC := os.Getenv("NATS_JOB_OUTBOX_PVC")
+	if outboxPVC != "" {
+		common = append(common, corev1.EnvVar{Name: "NATS_OUTBOX_DIR", Value: "/var/lib/platform-orchestrator-runner/outbox"})
+		jobSpec.Template.Spec.Volumes = append(jobSpec.Template.Spec.Volumes, corev1.Volume{
+			Name:         "nats-outbox",
+			VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: outboxPVC}},
+		})
+	}
+	secret := os.Getenv("NATS_JOB_CREDENTIALS_SECRET")
+	authType := os.Getenv("NATS_JOB_AUTH_TYPE")
+	if authType == "" {
+		authType = "token"
+	}
+	if secret != "" && authType == "token" {
+		key := os.Getenv("NATS_JOB_TOKEN_KEY")
+		if key == "" {
+			key = "token"
+		}
+		common = append(common, corev1.EnvVar{Name: "NATS_TOKEN", ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secret}, Key: key},
+		}})
+	}
+	if secret != "" && (authType == "credentials" || os.Getenv("NATS_JOB_CA_ENABLED") == "true") {
+		items := []corev1.KeyToPath{}
+		if authType == "credentials" {
+			key := os.Getenv("NATS_JOB_CREDENTIALS_KEY")
+			if key == "" {
+				key = "creds"
+			}
+			items = append(items, corev1.KeyToPath{Key: key, Path: "creds"})
+			common = append(common, corev1.EnvVar{Name: "NATS_CREDS_FILE", Value: "/etc/nats-auth/creds"})
+		}
+		if os.Getenv("NATS_JOB_CA_ENABLED") == "true" {
+			key := os.Getenv("NATS_JOB_CA_KEY")
+			if key == "" {
+				key = "ca.crt"
+			}
+			items = append(items, corev1.KeyToPath{Key: key, Path: "ca.crt"})
+			common = append(common, corev1.EnvVar{Name: "NATS_CA_FILE", Value: "/etc/nats-auth/ca.crt"})
+		}
+		jobSpec.Template.Spec.Volumes = append(jobSpec.Template.Spec.Volumes, corev1.Volume{
+			Name: "nats-auth", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+				SecretName: secret, Items: items,
+			}},
+		})
+	}
+	for i := range jobSpec.Template.Spec.Containers {
+		container := &jobSpec.Template.Spec.Containers[i]
+		if outboxPVC != "" {
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "nats-outbox", MountPath: "/var/lib/platform-orchestrator-runner/outbox"})
+		}
+		if secret != "" && (authType == "credentials" || os.Getenv("NATS_JOB_CA_ENABLED") == "true") {
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "nats-auth", MountPath: "/etc/nats-auth", ReadOnly: true})
+		}
+		for _, variable := range common {
+			found := false
+			for _, existing := range container.Env {
+				if existing.Name == variable.Name {
+					found = true
+					break
 				}
-				return typed.JobId, typed.DeploymentToken, errors.Errorf("job seems to be stuck: %s", message)
+			}
+			if !found {
+				container.Env = append(container.Env, variable)
 			}
 		}
-		return "", "", nil
-	default:
-		return "", "", errors.Errorf("received unknown message type %T", typed)
 	}
 }

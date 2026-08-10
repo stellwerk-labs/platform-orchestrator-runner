@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -45,7 +46,15 @@ func unarchiveBundleToFolder(gzipBuf []byte, destDir string) error {
 			continue
 		}
 
-		target := filepath.Join(destDir, header.Name)
+		name := filepath.Clean(header.Name)
+		if name == "." || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+			return errors.Errorf("bundle entry escapes destination: %q", header.Name)
+		}
+		target := filepath.Join(destDir, name)
+		relative, err := filepath.Rel(destDir, target)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return errors.Errorf("bundle entry escapes destination: %q", header.Name)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -57,14 +66,17 @@ func unarchiveBundleToFolder(gzipBuf []byte, destDir string) error {
 				return errors.Wrapf(err, "failed to create parent directories for: %s", target)
 			}
 
-			outFile, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode))
+			outFile, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode)&0o777)
 			if err != nil {
 				return errors.Wrapf(err, "failed to open output file: %s", target)
 			}
-			defer outFile.Close()
-
-			if _, err := io.Copy(outFile, tr); err != nil {
-				return errors.Wrapf(err, "failed to write content to: %s", target)
+			_, copyErr := io.Copy(outFile, tr)
+			closeErr := outFile.Close()
+			if copyErr != nil {
+				return errors.Wrapf(copyErr, "failed to write content to: %s", target)
+			}
+			if closeErr != nil {
+				return errors.Wrapf(closeErr, "failed to close output file: %s", target)
 			}
 		}
 	}

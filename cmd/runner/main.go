@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"runtime/debug"
@@ -17,10 +17,13 @@ import (
 
 	"filippo.io/age"
 	"github.com/pkg/errors"
+	"github.com/stellwerk-labs/golib/hmessaging"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/diode"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/executor"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/limitedlogsbuffer"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/runner"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/utils"
@@ -31,12 +34,15 @@ type LogsUploader func(ctx context.Context, logsBuffer bytes.Buffer) error
 const (
 	StandardMode      = "standard"
 	RemoteMode        = "remote"
+	DiodeExportMode   = "diode-export"
+	DiodeImportMode   = "diode-import"
+	OutboxFlushMode   = "outbox-flush"
 	maxLogsBufferSize = 10 * 1024 * 1024 // 10 MB
 )
 
 var (
-	buildInfo        *debug.BuildInfo
-	remoteConnectURL string
+	buildInfo      *debug.BuildInfo
+	natsConnectURL string
 )
 
 func init() {
@@ -68,7 +74,7 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 	slog.InfoContext(ctx, "Starting", "app", path.Base(buildInfo.Main.Path), "version", buildInfo.Main.Version)
 
 	// Define and parse flags
-	flag.StringVar(&remoteConnectURL, "remote-connect", "", "URL to connect to the Orchestrator and wait for remote runner messages")
+	flag.StringVar(&natsConnectURL, "nats-url", "", "NATS endpoint used for durable runner messages")
 	flag.Parse()
 
 	// Get positional arguments after flags
@@ -86,96 +92,158 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 
 	switch mode {
 	case StandardMode:
-		if remoteConnectURL != "" {
-			return nil, errors.New("standard mode does not allow --remote-connect parameter")
+		if natsConnectURL != "" {
+			return nil, errors.New("standard mode does not allow --nats-url parameter")
 		}
 		cfg, err := config.GetStandardModeConfiguration()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read standard mode config")
 		}
-		apiClient, err := platformorchestratorapi.NewClientWithResponses(
-			cfg.PlatformOrchestratorApiPrefix,
-			platformorchestratorapi.WithHTTPClient(utils.WrapHttpClientWithRetries(http.DefaultClient)),
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to initialize api client")
-		}
 		programLevel := setLogLevel(ctx, cfg.LogLevel)
 		apiUpdates, standardModeErr := executor.ExecuteStandardMode(ctx, cfg, runner.CreateRunner, limitedLogsBuffer, programLevel)
-		if err := utils.SendResultsToApi(ctx, apiClient, cfg.OrgID, cfg.DeploymentID, cfg.Token, apiUpdates); err != nil {
-			slog.ErrorContext(ctx, "[PLATFORM_ORCHESTRATOR]update-results", "err", err)
-			// logs uploaded if results cannot be pushed to api
-			return uploadLogsToRunnerLogsBucket(cfg.EncryptingLogsKey, cfg.LogsUrl), errors.Wrap(err, "failed to send results to api")
+		resultErr := publishDeploymentResultToNATS(ctx, cfg, apiUpdates)
+		logsUploader := uploadLogsToNATSObjectStore(cfg)
+		if resultErr != nil {
+			slog.ErrorContext(ctx, "[PLATFORM_ORCHESTRATOR]update-results", "err", resultErr)
+			return logsUploader, errors.Wrap(resultErr, "failed to publish deployment results")
 		} else if standardModeErr != nil {
-			// logs uploaded if results can be pushed to the api but execution failed
-			return uploadLogsToRunnerLogsBucket(cfg.EncryptingLogsKey, cfg.LogsUrl), errors.Wrap(standardModeErr, "failed to execute standard mode")
+			return logsUploader, errors.Wrap(standardModeErr, "failed to execute standard mode")
 		} else {
-			// logs uploaded if results can be pushed to the api and execution was successful
-			return uploadLogsToRunnerLogsBucket(cfg.EncryptingLogsKey, cfg.LogsUrl), nil
+			return logsUploader, nil
 		}
 	case RemoteMode:
-		if cfg, err := config.GetRemoteModeConfiguration(); err != nil {
+		if cfg, err := config.GetRemoteModeConfiguration(natsConnectURL); err != nil {
 			return nil, errors.Wrap(err, "failed to read remote mode config")
 		} else {
-			// source remoteConnectURL from config if not provided via flag
-			if remoteConnectURL == "" {
-				remoteConnectURL = cfg.RemoteUrl
-			}
-			if remoteConnectURL == "" {
-				return nil, errors.New("REMOTE_URL must be configured for remote mode or supplied with --remote-connect; refusing to connect")
-			}
-
-			if _, err := url.Parse(remoteConnectURL); err != nil {
-				return nil, errors.Wrap(err, "invalid remote connect URL provided")
-			}
-
 			programLevel := setLogLevel(ctx, cfg.LogLevel)
-			if apiClient, err := platformorchestratorapi.NewClientWithResponses(
-				remoteConnectURL,
-				platformorchestratorapi.WithHTTPClient(utils.WrapHttpClientWithRetries(http.DefaultClient)),
-			); err != nil {
-				return nil, errors.Wrap(err, "failed to initialize api client")
-			} else {
-				return nil, executor.ExecuteRemoteMode(ctx, cfg, apiClient, programLevel)
-			}
+			return nil, executor.ExecuteRemoteMode(ctx, cfg, programLevel)
 		}
+	case DiodeExportMode:
+		return nil, diode.RunExporter(ctx, diode.ExportConfig{
+			NATS: diodeNATSConfig(), Stream: os.Getenv("DIODE_STREAM"), Subject: os.Getenv("DIODE_SUBJECT"),
+			Durable: os.Getenv("DIODE_DURABLE"), OutputDir: os.Getenv("DIODE_OUTPUT_DIR"),
+			LedgerPath: os.Getenv("DIODE_LEDGER_PATH"), SigningKey: os.Getenv("DIODE_SIGNING_KEY_FILE"),
+			AttachObject: os.Getenv("DIODE_ATTACH_OBJECT"), BundleBucket: os.Getenv("NATS_BUNDLE_BUCKET"),
+		})
+	case DiodeImportMode:
+		return nil, diode.RunImporter(ctx, diode.ImportConfig{
+			NATS: diodeNATSConfig(), InputDir: os.Getenv("DIODE_INPUT_DIR"),
+			ProcessedDir: os.Getenv("DIODE_PROCESSED_DIR"), LedgerPath: os.Getenv("DIODE_LEDGER_PATH"),
+			QuarantineDir: os.Getenv("DIODE_QUARANTINE_DIR"), VerifyKey: os.Getenv("DIODE_VERIFY_KEY_FILE"),
+			ExpectedAttachment: os.Getenv("DIODE_EXPECT_ATTACHMENT"),
+		})
+	case OutboxFlushMode:
+		return nil, runOutboxFlusher(ctx, diodeNATSConfig(), os.Getenv("NATS_OUTBOX_DIR"))
 	default:
-		return nil, errors.Errorf("invalid mode: %s. Must be '%s' or '%s'", mode, StandardMode, RemoteMode)
+		return nil, errors.Errorf("invalid mode: %s. Must be '%s', '%s', '%s', '%s', or '%s'", mode, StandardMode, RemoteMode, DiodeExportMode, DiodeImportMode, OutboxFlushMode)
 	}
 }
 
-func uploadLogsToRunnerLogsBucket(encryptLogsKey, signedURL string) LogsUploader {
-	if signedURL == "" {
+func runOutboxFlusher(ctx context.Context, natsConfig natstransport.Config, outboxDir string) error {
+	natsConfig.OutboxDir = outboxDir
+	connection, err := natstransport.Connect(natsConfig)
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+	publisher, err := natstransport.NewPublisher(connection, outboxDir)
+	if err != nil {
+		return err
+	}
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		if err := publisher.Flush(ctx); err != nil {
+			slog.WarnContext(ctx, "failed to flush NATS message outbox", "err", err)
+		}
+		if err := natstransport.FlushLogObjects(ctx, connection, outboxDir); err != nil {
+			slog.WarnContext(ctx, "failed to flush NATS log outbox", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func diodeNATSConfig() natstransport.Config {
+	return natstransport.Config{
+		URL: os.Getenv("NATS_URL"), Token: os.Getenv("NATS_TOKEN"),
+		CredentialsFile: os.Getenv("NATS_CREDS_FILE"), CAFile: os.Getenv("NATS_CA_FILE"),
+		ClientCertFile: os.Getenv("NATS_CLIENT_CERT_FILE"), ClientKeyFile: os.Getenv("NATS_CLIENT_KEY_FILE"),
+		Name: "platform-orchestrator-diode-relay",
+	}
+}
+
+func natsConfig(cfg config.NATSConfiguration, name string) natstransport.Config {
+	return natstransport.Config{
+		URL: cfg.URL, Token: cfg.Token, CredentialsFile: cfg.CredentialsFile,
+		CAFile: cfg.CAFile, ClientCertFile: cfg.ClientCertFile,
+		ClientKeyFile: cfg.ClientKeyFile, OutboxDir: cfg.OutboxDir, Name: name,
+	}
+}
+
+func publishDeploymentResultToNATS(ctx context.Context, cfg *config.StandardModeConfiguration, result platformorchestratorapi.DeploymentResultsUpdateBody) error {
+	if cfg.RunnerID == "" {
+		return errors.New("RUNNER_ID is required when standard mode publishes results through NATS")
+	}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	subject, err := hmessaging.RunnerEventSubject(cfg.OrgID, cfg.RunnerID, "deployment-result")
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	event := hmessaging.EventEnvelope{
+		ProtocolVersion: hmessaging.ProtocolVersionV1, EventID: cfg.DeploymentID + ":deployment-result",
+		OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerID, DeploymentID: cfg.DeploymentID,
+		Type: "deployment-result", CreatedAt: now, Payload: payload,
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return natstransport.PublishMessage(ctx, natsConfig(cfg.NATS, "platform-orchestrator-job/"+cfg.DeploymentID), hmessaging.Message{
+		ID: event.EventID, Subject: subject, Data: data, CreatedAt: now,
+	})
+}
+
+func uploadLogsToNATSObjectStore(cfg *config.StandardModeConfiguration) LogsUploader {
+	if cfg.EncryptingLogsKey == "" {
 		return nil
 	}
-	// This is already checked when the configuration is parsed
-	recipient, _ := age.ParseX25519Recipient(encryptLogsKey)
+	recipient, _ := age.ParseX25519Recipient(cfg.EncryptingLogsKey)
 	return func(ctx context.Context, logsBuffer bytes.Buffer) error {
 		encryptedLogs, err := utils.EncryptBytes(logsBuffer.Bytes(), recipient)
 		if err != nil {
-			return errors.Wrap(err, "failed to encrypt logs")
+			return err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPut, signedURL, bytes.NewReader([]byte(encryptedLogs)))
+		objectKey := cfg.OrgID + "/" + cfg.DeploymentID
+		if cfg.DeploymentEnvUUID != "" {
+			objectKey = cfg.DeploymentEnvUUID + "/" + cfg.DeploymentID
+		}
+		sum := sha256.Sum256([]byte(encryptedLogs))
+		payload, _ := json.Marshal(map[string]interface{}{
+			"bucket": "PO_RUNNER_LOGS", "key": objectKey,
+			"size": len(encryptedLogs), "sha256": hex.EncodeToString(sum[:]),
+		})
+		subject, err := hmessaging.RunnerEventSubject(cfg.OrgID, cfg.RunnerID, "log-object-ready")
 		if err != nil {
-			return errors.Wrap(err, "failed to create HTTP request")
+			return err
 		}
-
-		req.Header.Set("Content-Type", "text/plain")
-		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(encryptedLogs)))
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return errors.Wrap(err, "failed to execute HTTP request")
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			return errors.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
-		}
-
-		return nil
+		now := time.Now().UTC()
+		event := hmessaging.EventEnvelope{ProtocolVersion: hmessaging.ProtocolVersionV1,
+			EventID: cfg.DeploymentID + ":log-object-ready", OrganizationID: cfg.OrgID,
+			RunnerID: cfg.RunnerID, DeploymentID: cfg.DeploymentID, Type: "log-object-ready",
+			CreatedAt: now, Payload: payload}
+		data, _ := json.Marshal(event)
+		readyEvent := hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: now}
+		return natstransport.PublishLogObject(ctx, natsConfig(cfg.NATS, "platform-orchestrator-logs/"+cfg.DeploymentID), natstransport.LogObject{
+			Bucket: natstransport.RunnerLogsBucket, Key: objectKey, EncryptedLog: []byte(encryptedLogs), ReadyEvent: readyEvent,
+		}, os.Getenv("NATS_BOOTSTRAP_OBJECT_STORE") == "true")
 	}
 }
 

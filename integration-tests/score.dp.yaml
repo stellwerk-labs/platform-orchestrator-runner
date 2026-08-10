@@ -7,7 +7,7 @@ service:
       port: 8080
 containers:
   platform-orchestrator-dp:
-    image: ghcr.io/stellwerk-labs/platform-orchestrator-dp:v1.0.1
+    image: ghcr.io/stellwerk-labs/platform-orchestrator-dp:v2.0.0
     command: ["/opt/server/server"]
     livenessProbe:
       httpGet:
@@ -25,7 +25,8 @@ containers:
         cpu: "0.025"
         memory: 64Mi
     variables:
-      AMQP_CONNECTION_STRING: amqp://${resources.rabbitmq.username}:${resources.rabbitmq.password}@${resources.rabbitmq.host}:${resources.rabbitmq.port}/${resources.rabbitmq.vhost}
+      NATS_URL: nats://nats:4222
+      RUNNER_NATS_URL: nats://nats:4222
       RUNNER_TOKEN_SALT: ${resources.env.RUNNER_TOKEN_SALT}
       DD_AGENT_HOST: $${pod.status.hostIP}
       DD_ENABLE: ${resources.env.DATADOG_ENABLED}
@@ -46,7 +47,6 @@ containers:
       VAULT_AUTH: kubernetes:platform-orchestrator-dp
       SERVER_BASE_URL: ${resources.env.SERVER_BASE_URL}
       INTERNAL_DATAPLANE_HOSTNAME: ${resources.env.INTERNAL_DATAPLANE_HOSTNAME}
-      RUNNER_LOGS_BUCKET: ${resources.env.RUNNER_LOGS_BUCKET}
       K8S_RUNNER_POD_SCHEDULING_DELAY: ${resources.env.K8S_RUNNER_POD_SCHEDULING_DELAY}
       METADATA_KEY: ${resources.env.METADATA_OUTPUT_KEY}
 
@@ -55,9 +55,6 @@ resources:
     type: environment
   postgres:
     type: postgres
-  rabbitmq:
-    type: amqp
-    id: rabbitmq
   platform-orchestrator-cp:
     type: service
   platform-orchestrator-iam:
@@ -72,7 +69,7 @@ resources:
     params:
       host: ${resources.dns.host}
       port: 8080
-      path: /orgs/[^/]+/(deployments|last-deployments|active-resources|metadata-keys|remote-runners)
+      path: /orgs/[^/]+/(deployments|last-deployments|active-resources|metadata-keys)
   well-known-route:
     type: route
     params:
