@@ -8,9 +8,10 @@ DEFAULT_K8S_RES := platform-orchestrator-runner
 RUNNER_CONFIGURATION := runner_config.json
 
 CP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-cp:v2.0.0
-DP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-dp:v2.0.0
+DP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-dp:v3.0.0
 IAM_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-iam:v2.0.0
 SERVICE_PLATFORM ?=
+PULL_FLAGS ?=
 
 compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml score.cp.yaml score.dp.yaml score.iam.yaml
 	score-compose check-version '>=0.16.0'
@@ -34,7 +35,7 @@ build-platform-orchestrator-runner:
 	
 .PHONY: build
 build: compose.yaml build-platform-orchestrator-runner
-	docker compose pull
+	docker compose pull $(PULL_FLAGS)
 	docker compose build --pull
 
 .PHONY: test
@@ -62,11 +63,11 @@ write-cluster-config:
 configure-cluster:
 	$(KUBECTL) delete namespace $(DEFAULT_K8S_RES) --ignore-not-found
 	$(KUBECTL) create namespace $(DEFAULT_K8S_RES)
+	kind load docker-image --name ${NAME} stellwerk-labs/platform-orchestrator-runner:test
 	$(KUBECTL) apply -f runner-cluster/config -R
 	echo "$${RUNNER_GIT_SSH_KEYS}" | $(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) runner-git-ssh-keys --from-file=key=/dev/stdin || true
 	$(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) aws-creds --from-literal=access_key_id="FAKE_ACCESS_KEY_ID" --from-literal=secret_access_key="SECRET_ACCESS_KEY"
 	@printf '{"cluster_data":{"certificate_authority_data": "%s", "server": "%s"},"auth":{"client_certificate_data": "%s", "client_key_data": "%s"}}\n' "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.certificate-authority-data}' --raw )" "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.server}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-certificate-data}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-key-data}' --raw )" > $(RUNNER_CONFIGURATION)
-	kind load docker-image --name ${NAME} stellwerk-labs/platform-orchestrator-runner:test
 
 .PHONY: clean
 clean:

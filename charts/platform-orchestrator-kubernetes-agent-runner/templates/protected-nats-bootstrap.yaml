@@ -3,9 +3,8 @@
 {{- $authSecret := index .Values "protected-nats" "container" "env" "NATS_AUTH_TOKEN" "valueFrom" "secretKeyRef" "name" }}
 {{- $authKey := index .Values "protected-nats" "container" "env" "NATS_AUTH_TOKEN" "valueFrom" "secretKeyRef" "key" }}
 {{- if not $authSecret }}{{ fail "protected-nats requires container.env.NATS_AUTH_TOKEN.valueFrom.secretKeyRef.name" }}{{ end }}
-{{- if not .Values.nats.existingSecret }}{{ fail "protected-nats requires nats.existingSecret for the runner and relay clients" }}{{ end }}
-{{- if ne $authSecret .Values.nats.existingSecret }}{{ fail "protected-nats auth Secret and nats.existingSecret must name the same Secret" }}{{ end }}
-{{- if and (ne (include "platform-orchestrator-kubernetes-agent-runner.namespace" .) (include "platform-orchestrator-kubernetes-agent-runner.deploymentJobNamespace" .)) (not .Values.nats.jobCredentialsExistingSecret) }}{{ fail "protected-nats with a separate Job namespace requires nats.jobCredentialsExistingSecret in that namespace" }}{{ end }}
+{{- if not .Values.airgap.nats.existingSecret }}{{ fail "protected-nats requires airgap.nats.existingSecret for gateway and relay clients" }}{{ end }}
+{{- if ne $authSecret .Values.airgap.nats.existingSecret }}{{ fail "protected-nats auth Secret and airgap.nats.existingSecret must name the same Secret" }}{{ end }}
 apiVersion: batch/v1
 kind: Job
 metadata:

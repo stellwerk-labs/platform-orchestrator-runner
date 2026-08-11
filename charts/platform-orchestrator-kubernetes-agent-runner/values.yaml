@@ -12,23 +12,23 @@ platformOrchestrator:
   # The log level for the runner. One of: debug, info, warn, error
   logLevel: "info"
 
-# Durable runner transport. In simple and edge modes this points to the central
-# JetStream service. In airgap mode it points to the protected-side broker.
-nats:
+# Public runner transport. The agent only initiates HTTPS requests. In airgap
+# mode the URL is replaced with the protected-side gateway Service.
+gateway:
   mode: simple
   url: ""
-  authType: token
-  token: ""
-  existingSecret: ""
-  tokenKey: token
-  credentialsKey: creds
+  privateKeyExistingSecret: ""
+  privateKeyKey: private-key.pem
+  caExistingSecret: ""
   caKey: ca.crt
-  caEnabled: false
-  # Secret containing credentials in the namespace where deployment Jobs run.
-  jobCredentialsExistingSecret: ""
+  clientCertificateExistingSecret: ""
+  clientCertificateKey: tls.crt
+  clientKeyKey: tls.key
+  # Secret containing the gateway CA in the namespace where deployment Jobs run.
+  jobCaExistingSecret: ""
 
 outbox:
-  enabled: true
+  enabled: false
   storageClassName: ""
   size: 1Gi
   accessModes:
@@ -67,6 +67,23 @@ protected-nats:
 
 protectedNatsBootstrap:
   image: natsio/nats-box:0.19.5
+
+airgap:
+  # Existing Secret in the runner namespace. The public key must match the
+  # private key used by the agent. runnerTokenSalt must match the central data
+  # plane so protected deployment jobs can authenticate their result uploads.
+  gatewaySecret: ""
+  publicKeyKey: public-key.pem
+  runnerTokenSaltKey: runner-token-salt
+  receiptKeyKey: receipt-key
+  nats:
+    url: ""
+    authType: token
+    existingSecret: ""
+    tokenKey: token
+    credentialsKey: creds
+    caKey: ca.crt
+    caEnabled: false
 
 # File-transfer relay endpoints for an external one-way diode device. Install
 # role=central outside the compartment and role=protected inside it. Each side

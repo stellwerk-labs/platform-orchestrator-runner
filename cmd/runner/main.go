@@ -3,25 +3,27 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"time"
 
 	"filippo.io/age"
 	"github.com/pkg/errors"
-	"github.com/stellwerk-labs/golib/hmessaging"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/diode"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/executor"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/gateway"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/gatewayapi"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/limitedlogsbuffer"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
@@ -37,12 +39,13 @@ const (
 	DiodeExportMode   = "diode-export"
 	DiodeImportMode   = "diode-import"
 	OutboxFlushMode   = "outbox-flush"
+	GatewayMode       = "gateway"
 	maxLogsBufferSize = 10 * 1024 * 1024 // 10 MB
 )
 
 var (
-	buildInfo      *debug.BuildInfo
-	natsConnectURL string
+	buildInfo  *debug.BuildInfo
+	gatewayURL string
 )
 
 func init() {
@@ -50,7 +53,8 @@ func init() {
 }
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	var exitErrorCode int
 	var logsBuffer bytes.Buffer
 	uploader, err := mainInner(ctx, limitedlogsbuffer.NewLimitedLogsBuffer(&logsBuffer, maxLogsBufferSize))
@@ -74,7 +78,7 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 	slog.InfoContext(ctx, "Starting", "app", path.Base(buildInfo.Main.Path), "version", buildInfo.Main.Version)
 
 	// Define and parse flags
-	flag.StringVar(&natsConnectURL, "nats-url", "", "NATS endpoint used for durable runner messages")
+	flag.StringVar(&gatewayURL, "gateway-url", "", "HTTPS runner gateway endpoint")
 	flag.Parse()
 
 	// Get positional arguments after flags
@@ -92,8 +96,8 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 
 	switch mode {
 	case StandardMode:
-		if natsConnectURL != "" {
-			return nil, errors.New("standard mode does not allow --nats-url parameter")
+		if gatewayURL != "" {
+			return nil, errors.New("standard mode does not allow --gateway-url parameter")
 		}
 		cfg, err := config.GetStandardModeConfiguration()
 		if err != nil {
@@ -101,8 +105,8 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 		}
 		programLevel := setLogLevel(ctx, cfg.LogLevel)
 		apiUpdates, standardModeErr := executor.ExecuteStandardMode(ctx, cfg, runner.CreateRunner, limitedLogsBuffer, programLevel)
-		resultErr := publishDeploymentResultToNATS(ctx, cfg, apiUpdates)
-		logsUploader := uploadLogsToNATSObjectStore(cfg)
+		resultErr := publishDeploymentResultToGateway(ctx, cfg, apiUpdates)
+		logsUploader := uploadLogsToGateway(cfg)
 		if resultErr != nil {
 			slog.ErrorContext(ctx, "[PLATFORM_ORCHESTRATOR]update-results", "err", resultErr)
 			return logsUploader, errors.Wrap(resultErr, "failed to publish deployment results")
@@ -112,7 +116,7 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 			return logsUploader, nil
 		}
 	case RemoteMode:
-		if cfg, err := config.GetRemoteModeConfiguration(natsConnectURL); err != nil {
+		if cfg, err := config.GetRemoteModeConfiguration(gatewayURL); err != nil {
 			return nil, errors.Wrap(err, "failed to read remote mode config")
 		} else {
 			programLevel := setLogLevel(ctx, cfg.LogLevel)
@@ -133,31 +137,110 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 			ExpectedAttachment: os.Getenv("DIODE_EXPECT_ATTACHMENT"),
 		})
 	case OutboxFlushMode:
-		return nil, runOutboxFlusher(ctx, diodeNATSConfig(), os.Getenv("NATS_OUTBOX_DIR"))
+		cfg, err := config.GetOutboxModeConfiguration()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read outbox mode config")
+		}
+		return nil, runOutboxFlusher(ctx, cfg)
+	case GatewayMode:
+		cfg, err := config.GetGatewayModeConfiguration()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read gateway mode config")
+		}
+		setLogLevel(ctx, cfg.LogLevel)
+		return nil, runGateway(ctx, cfg)
 	default:
-		return nil, errors.Errorf("invalid mode: %s. Must be '%s', '%s', '%s', '%s', or '%s'", mode, StandardMode, RemoteMode, DiodeExportMode, DiodeImportMode, OutboxFlushMode)
+		return nil, errors.Errorf("invalid mode: %s. Must be '%s', '%s', '%s', '%s', '%s', or '%s'", mode, StandardMode, RemoteMode, DiodeExportMode, DiodeImportMode, OutboxFlushMode, GatewayMode)
 	}
 }
 
-func runOutboxFlusher(ctx context.Context, natsConfig natstransport.Config, outboxDir string) error {
-	natsConfig.OutboxDir = outboxDir
-	connection, err := natstransport.Connect(natsConfig)
+func runGateway(ctx context.Context, cfg *config.GatewayModeConfiguration) error {
+	connection, err := natstransport.Connect(natsConfig(cfg.NATS, "platform-orchestrator-runner-gateway"))
 	if err != nil {
 		return err
 	}
 	defer connection.Close()
-	publisher, err := natstransport.NewPublisher(connection, outboxDir)
+	backend, err := gateway.NewNATSBackend(connection)
+	if err != nil {
+		return err
+	}
+	var publicKeys gateway.PublicKeyResolver
+	if cfg.ControlPlaneURL != "" {
+		publicKeys, err = gateway.NewControlPlanePublicKeyResolver(cfg.ControlPlaneURL, nil, cfg.PublicKeyCacheTTL)
+	} else {
+		publicKeys, err = gateway.NewStaticPublicKeyResolver(cfg.StaticOrganizationID, cfg.StaticRunnerID, cfg.StaticPublicKeyFile)
+	}
+	if err != nil {
+		return err
+	}
+	receiptKey, err := decodeGatewayKey(cfg.ReceiptKey)
+	if err != nil {
+		return err
+	}
+	handler, err := gateway.NewServer(gateway.ServerConfig{
+		BasePath: cfg.BasePath, Backend: backend, PublicKeys: publicKeys,
+		ReceiptKey: receiptKey, RunnerTokenSalt: cfg.RunnerTokenSalt,
+		FetchWait: cfg.FetchWait, MaxLogBytes: cfg.MaxLogBytes,
+	})
+	if err != nil {
+		return err
+	}
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           handler.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      cfg.FetchWait + 10*time.Second,
+		IdleTimeout:       time.Minute,
+	}
+	errorsChannel := make(chan error, 1)
+	go func() {
+		slog.InfoContext(ctx, "runner gateway listening", "address", server.Addr, "base_path", cfg.BasePath)
+		errorsChannel <- server.ListenAndServe()
+	}()
+	select {
+	case err := <-errorsChannel:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownContext)
+	}
+}
+
+func decodeGatewayKey(encoded string) ([]byte, error) {
+	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.StdEncoding} {
+		if key, err := encoding.DecodeString(encoded); err == nil {
+			if len(key) != 32 {
+				return nil, errors.New("RUNNER_GATEWAY_RECEIPT_KEY must decode to exactly 32 bytes")
+			}
+			return key, nil
+		}
+	}
+	return nil, errors.New("RUNNER_GATEWAY_RECEIPT_KEY must be base64 encoded")
+}
+
+func runOutboxFlusher(ctx context.Context, cfg *config.OutboxModeConfiguration) error {
+	client, err := gatewayapi.NewClient(gatewayapi.ClientConfig{
+		BaseURL: cfg.Gateway.URL, OrganizationID: cfg.OrganizationID, RunnerID: cfg.RunnerID,
+		CAFile: cfg.Gateway.CAFile, ClientCertFile: cfg.Gateway.ClientCertFile,
+		ClientKeyFile: cfg.Gateway.ClientKeyFile,
+	})
+	if err != nil {
+		return err
+	}
+	outbox, err := gatewayapi.NewOutbox(cfg.Gateway.OutboxDir, client)
 	if err != nil {
 		return err
 	}
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		if err := publisher.Flush(ctx); err != nil {
-			slog.WarnContext(ctx, "failed to flush NATS message outbox", "err", err)
-		}
-		if err := natstransport.FlushLogObjects(ctx, connection, outboxDir); err != nil {
-			slog.WarnContext(ctx, "failed to flush NATS log outbox", "err", err)
+		if err := outbox.Flush(ctx); err != nil {
+			slog.WarnContext(ctx, "failed to flush runner gateway outbox", "err", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -180,70 +263,58 @@ func natsConfig(cfg config.NATSConfiguration, name string) natstransport.Config 
 	return natstransport.Config{
 		URL: cfg.URL, Token: cfg.Token, CredentialsFile: cfg.CredentialsFile,
 		CAFile: cfg.CAFile, ClientCertFile: cfg.ClientCertFile,
-		ClientKeyFile: cfg.ClientKeyFile, OutboxDir: cfg.OutboxDir, Name: name,
+		ClientKeyFile: cfg.ClientKeyFile, Name: name,
 	}
 }
 
-func publishDeploymentResultToNATS(ctx context.Context, cfg *config.StandardModeConfiguration, result platformorchestratorapi.DeploymentResultsUpdateBody) error {
-	if cfg.RunnerID == "" {
-		return errors.New("RUNNER_ID is required when standard mode publishes results through NATS")
-	}
-	payload, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
-	subject, err := hmessaging.RunnerEventSubject(cfg.OrgID, cfg.RunnerID, "deployment-result")
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	event := hmessaging.EventEnvelope{
-		ProtocolVersion: hmessaging.ProtocolVersionV1, EventID: cfg.DeploymentID + ":deployment-result",
-		OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerID, DeploymentID: cfg.DeploymentID,
-		Type: "deployment-result", CreatedAt: now, Payload: payload,
-	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	return natstransport.PublishMessage(ctx, natsConfig(cfg.NATS, "platform-orchestrator-job/"+cfg.DeploymentID), hmessaging.Message{
-		ID: event.EventID, Subject: subject, Data: data, CreatedAt: now,
+func standardGatewayClient(cfg *config.StandardModeConfiguration) (*gatewayapi.Client, error) {
+	return gatewayapi.NewClient(gatewayapi.ClientConfig{
+		BaseURL: cfg.Gateway.URL, OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerID,
+		CAFile: cfg.Gateway.CAFile, ClientCertFile: cfg.Gateway.ClientCertFile,
+		ClientKeyFile: cfg.Gateway.ClientKeyFile,
 	})
 }
 
-func uploadLogsToNATSObjectStore(cfg *config.StandardModeConfiguration) LogsUploader {
+func publishDeploymentResultToGateway(ctx context.Context, cfg *config.StandardModeConfiguration, result platformorchestratorapi.DeploymentResultsUpdateBody) error {
+	client, err := standardGatewayClient(cfg)
+	if err != nil {
+		return err
+	}
+	if cfg.Gateway.OutboxDir == "" {
+		return client.PostResults(ctx, cfg.DeploymentID, cfg.DeploymentToken, result)
+	}
+	outbox, err := gatewayapi.NewOutbox(cfg.Gateway.OutboxDir, client)
+	if err != nil {
+		return err
+	}
+	return outbox.PostResults(ctx, cfg.DeploymentID, cfg.DeploymentToken, result)
+}
+
+func uploadLogsToGateway(cfg *config.StandardModeConfiguration) LogsUploader {
 	if cfg.EncryptingLogsKey == "" {
 		return nil
 	}
 	recipient, _ := age.ParseX25519Recipient(cfg.EncryptingLogsKey)
 	return func(ctx context.Context, logsBuffer bytes.Buffer) error {
+		if cfg.DeploymentEnvUUID == "" {
+			return errors.New("DEPLOYMENT_ENV_UUID is required to upload encrypted logs")
+		}
 		encryptedLogs, err := utils.EncryptBytes(logsBuffer.Bytes(), recipient)
 		if err != nil {
 			return err
 		}
-		objectKey := cfg.OrgID + "/" + cfg.DeploymentID
-		if cfg.DeploymentEnvUUID != "" {
-			objectKey = cfg.DeploymentEnvUUID + "/" + cfg.DeploymentID
-		}
-		sum := sha256.Sum256([]byte(encryptedLogs))
-		payload, _ := json.Marshal(map[string]interface{}{
-			"bucket": "PO_RUNNER_LOGS", "key": objectKey,
-			"size": len(encryptedLogs), "sha256": hex.EncodeToString(sum[:]),
-		})
-		subject, err := hmessaging.RunnerEventSubject(cfg.OrgID, cfg.RunnerID, "log-object-ready")
+		client, err := standardGatewayClient(cfg)
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC()
-		event := hmessaging.EventEnvelope{ProtocolVersion: hmessaging.ProtocolVersionV1,
-			EventID: cfg.DeploymentID + ":log-object-ready", OrganizationID: cfg.OrgID,
-			RunnerID: cfg.RunnerID, DeploymentID: cfg.DeploymentID, Type: "log-object-ready",
-			CreatedAt: now, Payload: payload}
-		data, _ := json.Marshal(event)
-		readyEvent := hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: now}
-		return natstransport.PublishLogObject(ctx, natsConfig(cfg.NATS, "platform-orchestrator-logs/"+cfg.DeploymentID), natstransport.LogObject{
-			Bucket: natstransport.RunnerLogsBucket, Key: objectKey, EncryptedLog: []byte(encryptedLogs), ReadyEvent: readyEvent,
-		}, os.Getenv("NATS_BOOTSTRAP_OBJECT_STORE") == "true")
+		if cfg.Gateway.OutboxDir == "" {
+			return client.PutLogs(ctx, cfg.DeploymentEnvUUID, cfg.DeploymentID, cfg.DeploymentToken, strings.NewReader(encryptedLogs))
+		}
+		outbox, err := gatewayapi.NewOutbox(cfg.Gateway.OutboxDir, client)
+		if err != nil {
+			return err
+		}
+		return outbox.PutLogs(ctx, cfg.DeploymentEnvUUID, cfg.DeploymentID, cfg.DeploymentToken, encryptedLogs)
 	}
 }
 

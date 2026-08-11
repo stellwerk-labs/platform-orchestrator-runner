@@ -5,8 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -27,33 +32,36 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
-	kindE2EOrganizationID = "nats-e2e-org"
-	kindE2ERunnerID       = "nats-e2e-runner"
-	kindE2ENamespace      = "po-nats-runner-e2e"
-	kindE2EBundleBucket   = "PO_RUNNER_BUNDLES"
-	kindE2ELogsBucket     = "PO_RUNNER_LOGS"
+	kindE2EOrganizationID  = "gateway-e2e-org"
+	kindE2ERunnerID        = "gateway-e2e-runner"
+	kindE2ENamespace       = "po-nats-runner-e2e"
+	kindE2EBundleBucket    = "PO_RUNNER_BUNDLES"
+	kindE2ELogsBucket      = "PO_RUNNER_LOGS"
+	kindE2ERunnerTokenSalt = "isolated-kind-gateway-e2e-token-salt"
+	kindE2EGatewayURL      = "http://runner-gateway.po-nats-runner-e2e.svc.cluster.local:8080/runner-gateway"
 )
 
-// TestKindNATSRunnerDeploysKubernetesResource is intentionally opt-in. It is a
+// TestKindGatewayRunnerDeploysKubernetesResource is intentionally opt-in. It is a
 // destructive integration test within one dedicated namespace on an explicitly
 // named Kind context, never a generic current-context test.
-func TestKindNATSRunnerDeploysKubernetesResource(t *testing.T) {
-	if os.Getenv("PO_NATS_KIND_E2E") != "1" {
-		t.Skip("set PO_NATS_KIND_E2E=1 to run the isolated Kind/NATS deployment test")
+func TestKindGatewayRunnerDeploysKubernetesResource(t *testing.T) {
+	if os.Getenv("PO_GATEWAY_KIND_E2E") != "1" {
+		t.Skip("set PO_GATEWAY_KIND_E2E=1 to run the isolated Kind/gateway deployment test")
 	}
-	contextName := os.Getenv("PO_NATS_KIND_CONTEXT")
+	contextName := os.Getenv("PO_GATEWAY_KIND_CONTEXT")
 	if !strings.HasPrefix(contextName, "kind-") {
-		t.Fatalf("PO_NATS_KIND_CONTEXT must name an explicit Kind context, got %q", contextName)
+		t.Fatalf("PO_GATEWAY_KIND_CONTEXT must name an explicit Kind context, got %q", contextName)
 	}
-	runnerImage := requiredEnvironment(t, "PO_NATS_KIND_RUNNER_IMAGE")
-	natsURL := requiredEnvironment(t, "PO_NATS_KIND_NATS_URL")
-	inClusterNATSURL := requiredEnvironment(t, "PO_NATS_KIND_NATS_IN_CLUSTER_URL")
-	kubeconfigPath := requiredEnvironment(t, "PO_NATS_KIND_KUBECONFIG")
+	runnerImage := requiredEnvironment(t, "PO_GATEWAY_KIND_RUNNER_IMAGE")
+	natsURL := requiredEnvironment(t, "PO_GATEWAY_KIND_NATS_URL")
+	inClusterNATSURL := requiredEnvironment(t, "PO_GATEWAY_KIND_NATS_IN_CLUSTER_URL")
+	kubeconfigPath := requiredEnvironment(t, "PO_GATEWAY_KIND_KUBECONFIG")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
 	defer cancel()
@@ -83,11 +91,13 @@ func TestKindNATSRunnerDeploysKubernetesResource(t *testing.T) {
 	require.NoError(t, hnats.EnsureStandardStreams(ctx, modern, 1))
 	ensureKindE2EObjectStore(t, js, kindE2EBundleBucket)
 	ensureKindE2EObjectStore(t, js, kindE2ELogsBucket)
-	installRemoteRunner(t, ctx, kube, runnerImage, inClusterNATSURL)
+	privateKey, publicKey := kindE2EAgentKeyPair(t)
+	installGateway(t, ctx, kube, runnerImage, inClusterNATSURL, publicKey)
+	installRemoteRunner(t, ctx, kube, runnerImage, privateKey)
 
 	deploymentID := uuid.New()
 	environmentID := uuid.New()
-	proofName := "nats-runner-proof-" + strings.Split(deploymentID.String(), "-")[0]
+	proofName := "gateway-runner-proof-" + strings.Split(deploymentID.String(), "-")[0]
 	identity, err := age.GenerateX25519Identity()
 	require.NoError(t, err)
 	bundle := kindE2EBundle(t, proofName)
@@ -102,7 +112,7 @@ func TestKindNATSRunnerDeploysKubernetesResource(t *testing.T) {
 		nats.BindStream(hmessaging.RunnerEventsStreamName), nats.ManualAck(), nats.AckExplicit())
 	require.NoError(t, err)
 
-	publishKindE2ECommand(t, ctx, connection, runnerImage, deploymentID, environmentID, bundleKey, proofName, identity.Recipient().String())
+	publishKindE2ECommand(t, ctx, connection, runnerImage, deploymentID, environmentID, proofName, identity.Recipient().String())
 
 	require.Eventually(t, func() bool {
 		_, getErr := kube.CoreV1().ConfigMaps(kindE2ENamespace).Get(ctx, proofName, metav1.GetOptions{})
@@ -148,9 +158,24 @@ func requiredEnvironment(t *testing.T, name string) string {
 	t.Helper()
 	value := os.Getenv(name)
 	if value == "" {
-		t.Fatalf("%s is required when PO_NATS_KIND_E2E=1", name)
+		t.Fatalf("%s is required when PO_GATEWAY_KIND_E2E=1", name)
 	}
 	return value
+}
+
+func kindE2EAgentKeyPair(t *testing.T) (string, []byte) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	privateDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	publicDER, err := x509.MarshalPKIXPublicKey(publicKey)
+	require.NoError(t, err)
+	privatePEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})
+	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})
+	require.NotEmpty(t, privatePEM)
+	require.NotEmpty(t, publicPEM)
+	return string(privatePEM), publicPEM
 }
 
 func kindClient(t *testing.T, kubeconfigPath, contextName string) kubernetes.Interface {
@@ -200,7 +225,59 @@ func installKindE2ERBAC(t *testing.T, ctx context.Context, kube kubernetes.Inter
 	require.NoError(t, err)
 }
 
-func installRemoteRunner(t *testing.T, ctx context.Context, kube kubernetes.Interface, image, natsURL string) {
+func installGateway(t *testing.T, ctx context.Context, kube kubernetes.Interface, image, natsURL string, publicKey []byte) {
+	t.Helper()
+	_, err := kube.CoreV1().Secrets(kindE2ENamespace).Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "runner-gateway", Namespace: kindE2ENamespace},
+		Data:       map[string][]byte{"public-key.pem": publicKey},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = kube.CoreV1().Services(kindE2ENamespace).Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "runner-gateway", Namespace: kindE2ENamespace},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"app": "runner-gateway"},
+			Ports:    []corev1.ServicePort{{Name: "http", Port: 8080}},
+		},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	replicas := int32(2)
+	receiptKey := sha256.Sum256([]byte("isolated-kind-gateway-e2e-receipt-key"))
+	_, err = kube.AppsV1().Deployments(kindE2ENamespace).Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "runner-gateway", Namespace: kindE2ENamespace},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "runner-gateway"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "runner-gateway"}},
+				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{{Name: "public-key", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "runner-gateway"}}}},
+					Containers: []corev1.Container{{
+						Name: "gateway", Image: image, ImagePullPolicy: corev1.PullNever, Args: []string{"gateway"},
+						Env: []corev1.EnvVar{
+							{Name: "NATS_URL", Value: natsURL},
+							{Name: "RUNNER_GATEWAY_RECEIPT_KEY", Value: base64.RawURLEncoding.EncodeToString(receiptKey[:])},
+							{Name: "RUNNER_TOKEN_SALT", Value: kindE2ERunnerTokenSalt},
+							{Name: "RUNNER_GATEWAY_STATIC_ORG_ID", Value: kindE2EOrganizationID},
+							{Name: "RUNNER_GATEWAY_STATIC_RUNNER_ID", Value: kindE2ERunnerID},
+							{Name: "RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE", Value: "/etc/runner-gateway/public-key.pem"},
+						},
+						VolumeMounts: []corev1.VolumeMount{{Name: "public-key", MountPath: "/etc/runner-gateway", ReadOnly: true}},
+						ReadinessProbe: &corev1.Probe{InitialDelaySeconds: 1, PeriodSeconds: 1, ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{Path: "/runner-gateway/healthz", Port: intstr.FromInt(8080)},
+						}},
+					}},
+				},
+			},
+		},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		deployment, getErr := kube.AppsV1().Deployments(kindE2ENamespace).Get(ctx, "runner-gateway", metav1.GetOptions{})
+		return getErr == nil && deployment.Status.ReadyReplicas == replicas
+	}, 90*time.Second, time.Second)
+}
+
+func installRemoteRunner(t *testing.T, ctx context.Context, kube kubernetes.Interface, image, privateKey string) {
 	t.Helper()
 	replicas := int32(1)
 	_, err := kube.AppsV1().Deployments(kindE2ENamespace).Create(ctx, &appsv1.Deployment{
@@ -217,7 +294,7 @@ func installRemoteRunner(t *testing.T, ctx context.Context, kube kubernetes.Inte
 						Name: "runner", Image: image, ImagePullPolicy: corev1.PullNever, Args: []string{"remote"},
 						Env: []corev1.EnvVar{
 							{Name: "ORG_ID", Value: kindE2EOrganizationID}, {Name: "RUNNER_ID", Value: kindE2ERunnerID},
-							{Name: "NATS_URL", Value: natsURL}, {Name: "NATS_OUTBOX_DIR", Value: "/tmp/outbox"},
+							{Name: "PRIVATE_KEY", Value: privateKey}, {Name: "RUNNER_GATEWAY_URL", Value: kindE2EGatewayURL},
 						},
 						ReadinessProbe: &corev1.Probe{InitialDelaySeconds: 1, PeriodSeconds: 1, ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", "test -d /proc/1"}}}},
 					}},
@@ -232,7 +309,7 @@ func installRemoteRunner(t *testing.T, ctx context.Context, kube kubernetes.Inte
 	}, 90*time.Second, time.Second)
 }
 
-func publishKindE2ECommand(t *testing.T, ctx context.Context, connection *nats.Conn, image string, deploymentID, environmentID uuid.UUID, bundleKey, proofName, logRecipient string) {
+func publishKindE2ECommand(t *testing.T, ctx context.Context, connection *nats.Conn, image string, deploymentID, environmentID uuid.UUID, proofName, logRecipient string) {
 	t.Helper()
 	zero := int32(0)
 	jobSpec := batchv1.JobSpec{
@@ -247,10 +324,11 @@ func publishKindE2ECommand(t *testing.T, ctx context.Context, connection *nats.C
 					Name: "runner", Image: image, ImagePullPolicy: corev1.PullNever, Args: []string{"standard"},
 					VolumeMounts: []corev1.VolumeMount{{Name: "tofu", MountPath: "/opt/runner/tofu"}},
 					Env: []corev1.EnvVar{
+						{Name: "ORG_ID", Value: kindE2EOrganizationID}, {Name: "RUNNER_ID", Value: kindE2ERunnerID},
 						{Name: "DEPLOYMENT_ID", Value: deploymentID.String()}, {Name: "DEPLOYMENT_ENV_UUID", Value: environmentID.String()},
 						{Name: "MODE", Value: "deploy"}, {Name: "IAC_BACKEND", Value: "opentofu"},
-						{Name: "IAC_CODE_DIR", Value: "/opt/runner/tofu"}, {Name: "NATS_BUNDLE_BUCKET", Value: kindE2EBundleBucket},
-						{Name: "NATS_BUNDLE_KEY", Value: bundleKey}, {Name: "ENCRYPTING_LOGS_KEY", Value: logRecipient},
+						{Name: "IAC_CODE_DIR", Value: "/opt/runner/tofu"}, {Name: "TOKEN", Value: kindE2EDeploymentToken(deploymentID.String())},
+						{Name: "ENCRYPTING_LOGS_KEY", Value: logRecipient},
 					},
 				}},
 			},
@@ -306,6 +384,12 @@ func collectKindE2EEvents(t *testing.T, ctx context.Context, subscription *nats.
 	return events
 }
 
+func kindE2EDeploymentToken(deploymentID string) string {
+	hash := sha256.New()
+	_, _ = fmt.Fprint(hash, kindE2ERunnerTokenSalt, kindE2EOrganizationID, deploymentID)
+	return base64.RawURLEncoding.EncodeToString(hash.Sum(nil))
+}
+
 func kindE2EBundle(t *testing.T, proofName string) []byte {
 	t.Helper()
 	content := fmt.Sprintf(`terraform {
@@ -328,7 +412,7 @@ resource "kubernetes_config_map_v1" "proof" {
     name      = %q
     namespace = %q
   }
-  data = { transport = "nats-jetstream" }
+  data = { transport = "https-runner-gateway" }
 }
 
 output "platform_orchestrator_metadata" {

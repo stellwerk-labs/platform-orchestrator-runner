@@ -171,7 +171,7 @@ func RunImporter(ctx context.Context, config ImportConfig) error {
 		return err
 	}
 	defer connection.Close()
-	publisher, err := natstransport.NewPublisher(connection, "")
+	publisher, err := natstransport.NewPublisher(connection)
 	if err != nil {
 		return err
 	}

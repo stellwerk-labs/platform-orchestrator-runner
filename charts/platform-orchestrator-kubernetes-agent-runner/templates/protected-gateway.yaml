@@ -1,0 +1,93 @@
+{{- if eq .Values.gateway.mode "airgap" }}
+{{- if not (index .Values "protected-nats" "enabled") }}{{ fail "gateway.mode=airgap requires protected-nats.enabled=true" }}{{ end }}
+{{- if not .Values.airgap.gatewaySecret }}{{ fail "gateway.mode=airgap requires airgap.gatewaySecret" }}{{ end }}
+{{- $natsURL := .Values.airgap.nats.url -}}
+{{- if not $natsURL -}}{{- $natsURL = printf "nats://%s-protected-nats:4222" .Release.Name -}}{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-protected-gateway
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: protected-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: protected-gateway
+  template:
+    metadata:
+      labels:
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: protected-gateway
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/runner/runner"]
+          args: ["gateway"]
+          env:
+            - {name: NATS_URL, value: {{ $natsURL | quote }}}
+            - {name: RUNNER_GATEWAY_STATIC_ORG_ID, value: {{ .Values.platformOrchestrator.orgId | quote }}}
+            - {name: RUNNER_GATEWAY_STATIC_RUNNER_ID, value: {{ .Values.platformOrchestrator.runnerId | quote }}}
+            - {name: RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE, value: /etc/protected-gateway/public-key.pem}
+            - name: RUNNER_TOKEN_SALT
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.airgap.gatewaySecret }}, key: {{ .Values.airgap.runnerTokenSaltKey }}}
+            - name: RUNNER_GATEWAY_RECEIPT_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.airgap.gatewaySecret }}, key: {{ .Values.airgap.receiptKeyKey }}}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8080}
+          livenessProbe:
+            httpGet: {path: /runner-gateway/healthz, port: http}
+          readinessProbe:
+            httpGet: {path: /runner-gateway/healthz, port: http}
+          volumeMounts:
+            - {name: gateway-key, mountPath: /etc/protected-gateway, readOnly: true}
+            {{- if or (eq .Values.airgap.nats.authType "credentials") .Values.airgap.nats.caEnabled }}
+            - {name: nats-auth, mountPath: /etc/nats-auth, readOnly: true}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: gateway-key
+          secret:
+            secretName: {{ .Values.airgap.gatewaySecret }}
+            items:
+              - {key: {{ .Values.airgap.publicKeyKey }}, path: public-key.pem}
+        {{- if or (eq .Values.airgap.nats.authType "credentials") .Values.airgap.nats.caEnabled }}
+        - name: nats-auth
+          secret:
+            secretName: {{ required "airgap.nats.existingSecret is required for credentials or CA" .Values.airgap.nats.existingSecret }}
+            items:
+              {{- if eq .Values.airgap.nats.authType "credentials" }}
+              - {key: {{ .Values.airgap.nats.credentialsKey }}, path: creds}
+              {{- end }}
+              {{- if .Values.airgap.nats.caEnabled }}
+              - {key: {{ .Values.airgap.nats.caKey }}, path: ca.crt}
+              {{- end }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-protected-gateway
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: protected-gateway
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+{{- end }}

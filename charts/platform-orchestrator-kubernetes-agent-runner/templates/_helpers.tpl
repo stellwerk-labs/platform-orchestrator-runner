@@ -74,19 +74,19 @@ Allow the release namespace to be overridden for multi-namespace deployments in 
 {{- default (include "platform-orchestrator-kubernetes-agent-runner.namespace" .) .Values.jobsRbac.namespace | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" -}}
-{{- if and (eq .Values.nats.authType "token") (or .Values.nats.existingSecret .Values.nats.token) }}
+{{- define "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" -}}
+{{- if eq .Values.airgap.nats.authType "token" }}
 - name: NATS_TOKEN
   valueFrom:
     secretKeyRef:
-      name: {{ default (include "platform-orchestrator-kubernetes-agent-runner.fullname" .) .Values.nats.existingSecret }}
-      key: {{ .Values.nats.tokenKey }}
+      name: {{ required "airgap.nats.existingSecret is required for token authentication" .Values.airgap.nats.existingSecret }}
+      key: {{ .Values.airgap.nats.tokenKey }}
 {{- end }}
-{{- if eq .Values.nats.authType "credentials" }}
+{{- if eq .Values.airgap.nats.authType "credentials" }}
 - name: NATS_CREDS_FILE
   value: /etc/nats-auth/creds
 {{- end }}
-{{- if .Values.nats.caEnabled }}
+{{- if .Values.airgap.nats.caEnabled }}
 - name: NATS_CA_FILE
   value: /etc/nats-auth/ca.crt
 {{- end }}
@@ -97,7 +97,7 @@ volumeMounts:
   - {name: diode, mountPath: /diode}
   - {name: signing-key, mountPath: /keys/sign, readOnly: true}
   - {name: verification-key, mountPath: /keys/verify, readOnly: true}
-  {{- if or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled }}
+  {{- if or (eq .Values.airgap.nats.authType "credentials") .Values.airgap.nats.caEnabled }}
   - {name: nats-auth, mountPath: /etc/nats-auth, readOnly: true}
   {{- end }}
 securityContext:

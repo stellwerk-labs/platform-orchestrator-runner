@@ -31,7 +31,7 @@ const (
 type StandardModeConfiguration struct {
 	LogLevel          string         `env:"LOG_LEVEL, default=info"`
 	OrgID             string         `env:"ORG_ID,required"`
-	RunnerID          string         `env:"RUNNER_ID"`
+	RunnerID          string         `env:"RUNNER_ID,required"`
 	DeploymentID      string         `env:"DEPLOYMENT_ID,required"`
 	DeploymentEnvUUID string         `env:"DEPLOYMENT_ENV_UUID"`
 	Mode              RunnerMode     `env:"MODE,required"`
@@ -40,15 +40,47 @@ type StandardModeConfiguration struct {
 	IaCCodeDir        string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
 	IaCBackend        IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
 	EncryptingLogsKey string         `env:"ENCRYPTING_LOGS_KEY"`
-	NATS              NATSConfiguration
+	DeploymentToken   string         `env:"TOKEN,required"`
+	Gateway           GatewayClientConfiguration
 }
 
 type RemoteModeConfiguration struct {
 	LogLevel           string        `env:"LOG_LEVEL, default=info"`
 	OrgID              string        `env:"ORG_ID,required"`
 	RunnerId           string        `env:"RUNNER_ID,required"`
+	PrivateKey         string        `env:"PRIVATE_KEY,required"`
 	PodSchedulingDelay time.Duration `env:"K8S_RUNNER_POD_SCHEDULING_DELAY,default=5m"`
-	NATS               NATSConfiguration
+	Gateway            GatewayClientConfiguration
+}
+
+type GatewayClientConfiguration struct {
+	URL            string `env:"RUNNER_GATEWAY_URL"`
+	CAFile         string `env:"RUNNER_GATEWAY_CA_FILE"`
+	ClientCertFile string `env:"RUNNER_GATEWAY_CLIENT_CERT_FILE"`
+	ClientKeyFile  string `env:"RUNNER_GATEWAY_CLIENT_KEY_FILE"`
+	OutboxDir      string `env:"RUNNER_GATEWAY_OUTBOX_DIR"`
+}
+
+type OutboxModeConfiguration struct {
+	OrganizationID string `env:"ORG_ID,required"`
+	RunnerID       string `env:"RUNNER_ID,required"`
+	Gateway        GatewayClientConfiguration
+}
+
+type GatewayModeConfiguration struct {
+	LogLevel             string        `env:"LOG_LEVEL,default=info"`
+	Port                 int           `env:"PORT,default=8080"`
+	BasePath             string        `env:"RUNNER_GATEWAY_BASE_PATH,default=/runner-gateway"`
+	ReceiptKey           string        `env:"RUNNER_GATEWAY_RECEIPT_KEY,required"`
+	RunnerTokenSalt      string        `env:"RUNNER_TOKEN_SALT,required"`
+	ControlPlaneURL      string        `env:"CONTROL_PLANE_URL"`
+	StaticOrganizationID string        `env:"RUNNER_GATEWAY_STATIC_ORG_ID"`
+	StaticRunnerID       string        `env:"RUNNER_GATEWAY_STATIC_RUNNER_ID"`
+	StaticPublicKeyFile  string        `env:"RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE"`
+	PublicKeyCacheTTL    time.Duration `env:"RUNNER_GATEWAY_PUBLIC_KEY_CACHE_TTL,default=1m"`
+	FetchWait            time.Duration `env:"RUNNER_GATEWAY_FETCH_WAIT,default=25s"`
+	MaxLogBytes          int64         `env:"RUNNER_GATEWAY_MAX_LOG_BYTES,default=16777216"`
+	NATS                 NATSConfiguration
 }
 
 type NATSConfiguration struct {
@@ -58,7 +90,6 @@ type NATSConfiguration struct {
 	CAFile           string `env:"NATS_CA_FILE"`
 	ClientCertFile   string `env:"NATS_CLIENT_CERT_FILE"`
 	ClientKeyFile    string `env:"NATS_CLIENT_KEY_FILE"`
-	OutboxDir        string `env:"NATS_OUTBOX_DIR"`
 	BootstrapStreams bool   `env:"NATS_BOOTSTRAP_STREAMS,default=false"`
 	BundleBucket     string `env:"NATS_BUNDLE_BUCKET,default=PO_RUNNER_BUNDLES"`
 	BundleKey        string `env:"NATS_BUNDLE_KEY"`
@@ -87,8 +118,8 @@ func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
 	if err := validate.Struct(conf); err != nil {
 		return nil, err
 	}
-	if conf.NATS.URL == "" {
-		return nil, errors.New("NATS_URL is required")
+	if conf.Gateway.URL == "" {
+		return nil, errors.New("RUNNER_GATEWAY_URL is required")
 	}
 
 	if err := validateMode(conf.Mode); err != nil {
@@ -112,7 +143,7 @@ func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
 	return conf, nil
 }
 
-func GetRemoteModeConfiguration(natsURLOverrides ...string) (*RemoteModeConfiguration, error) {
+func GetRemoteModeConfiguration(gatewayURLOverrides ...string) (*RemoteModeConfiguration, error) {
 	conf := &RemoteModeConfiguration{}
 
 	ctx := context.Background()
@@ -124,18 +155,62 @@ func GetRemoteModeConfiguration(natsURLOverrides ...string) (*RemoteModeConfigur
 	}); err != nil {
 		return nil, err
 	}
-	if len(natsURLOverrides) > 0 && natsURLOverrides[0] != "" {
-		conf.NATS.URL = natsURLOverrides[0]
+	if len(gatewayURLOverrides) > 0 && gatewayURLOverrides[0] != "" {
+		conf.Gateway.URL = gatewayURLOverrides[0]
 	}
 
 	validate := validator.New()
 	if err := validate.Struct(conf); err != nil {
 		return nil, err
 	}
+	if conf.Gateway.URL == "" {
+		return nil, errors.New("RUNNER_GATEWAY_URL is required")
+	}
+
+	return conf, nil
+}
+
+func GetGatewayModeConfiguration() (*GatewayModeConfiguration, error) {
+	conf := &GatewayModeConfiguration{}
+	if err := envconfig.ProcessWith(context.Background(), &envconfig.Config{
+		DefaultOverwrite: true,
+		DefaultNoInit:    true,
+		Target:           conf,
+	}); err != nil {
+		return nil, err
+	}
 	if conf.NATS.URL == "" {
 		return nil, errors.New("NATS_URL is required")
 	}
+	usesControlPlane := conf.ControlPlaneURL != ""
+	usesStaticKey := conf.StaticOrganizationID != "" || conf.StaticRunnerID != "" || conf.StaticPublicKeyFile != ""
+	if usesControlPlane == usesStaticKey {
+		return nil, errors.New("configure exactly one gateway public key source: CONTROL_PLANE_URL or all static runner key settings")
+	}
+	if usesStaticKey && (conf.StaticOrganizationID == "" || conf.StaticRunnerID == "" || conf.StaticPublicKeyFile == "") {
+		return nil, errors.New("static gateway authentication requires organization ID, runner ID, and public key file")
+	}
+	if conf.Port < 1 || conf.Port > 65535 {
+		return nil, errors.New("PORT must be between 1 and 65535")
+	}
+	if conf.MaxLogBytes < 1 {
+		return nil, errors.New("RUNNER_GATEWAY_MAX_LOG_BYTES must be positive")
+	}
+	return conf, nil
+}
 
+func GetOutboxModeConfiguration() (*OutboxModeConfiguration, error) {
+	conf := &OutboxModeConfiguration{}
+	if err := envconfig.ProcessWith(context.Background(), &envconfig.Config{
+		DefaultOverwrite: true,
+		DefaultNoInit:    true,
+		Target:           conf,
+	}); err != nil {
+		return nil, err
+	}
+	if conf.Gateway.URL == "" || conf.Gateway.OutboxDir == "" {
+		return nil, errors.New("RUNNER_GATEWAY_URL and RUNNER_GATEWAY_OUTBOX_DIR are required")
+	}
 	return conf, nil
 }
 

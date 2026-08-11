@@ -30,6 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -346,13 +348,17 @@ func MustCreateK8sRunnerWithIaCBackend(t *testing.T, cpClient platformorchestrat
 	return runner
 }
 
-func MustCreateRemoteRunnerWithRule(t *testing.T, cpClient platformorchestratorcp.ClientWithResponsesInterface, orgId, runnerId, projectId, namespace, serviceaccount string) *platformorchestratorcp.Runner {
-	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+func MustCreateRemoteRunnerWithRule(t *testing.T, cpClient platformorchestratorcp.ClientWithResponsesInterface, orgId, runnerId, projectId, namespace, serviceaccount string) (*platformorchestratorcp.Runner, []byte) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	publicKeyDER, err := x509.MarshalPKIXPublicKey(publicKey)
 	require.NoError(t, err)
 	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyDER})
 	require.NotEmpty(t, publicKeyPEM)
+	privateKeyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyDER})
+	require.NotEmpty(t, privateKeyPEM)
 	cfg := new(platformorchestratorcp.RunnerConfiguration)
 	require.NoError(t, cfg.FromK8sAgentRunnerConfiguration(platformorchestratorcp.K8sAgentRunnerConfiguration{
 		Job: platformorchestratorcp.K8sRunnerJobConfig{
@@ -382,7 +388,7 @@ func MustCreateRemoteRunnerWithRule(t *testing.T, cpClient platformorchestratorc
 	})
 	require.NoError(t, err)
 
-	return runner
+	return runner, privateKeyPEM
 }
 
 type K8sClient struct {
@@ -390,7 +396,7 @@ type K8sClient struct {
 	discoveryMapper *restmapper.DeferredDiscoveryRESTMapper
 }
 
-func MustDeployRemoteRunner(t *testing.T, orgId string) {
+func MustDeployRemoteRunner(t *testing.T, orgId string, privateKey []byte) {
 	templateFilePath := "./runner-cluster/remote_runner.yaml"
 	manifestBytes, err := os.ReadFile(templateFilePath)
 	require.NoError(t, err)
@@ -403,6 +409,18 @@ func MustDeployRemoteRunner(t *testing.T, orgId string) {
 	require.NoError(t, err)
 
 	clientset, err := kubernetes.NewForConfig(config)
+	require.NoError(t, err)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "runner-identity", Namespace: defaultNamespace},
+		Data:       map[string][]byte{"private-key.pem": privateKey},
+	}
+	_, err = clientset.CoreV1().Secrets(defaultNamespace).Create(t.Context(), secret, metav1.CreateOptions{})
+	if k8serrors.IsAlreadyExists(err) {
+		existing, getErr := clientset.CoreV1().Secrets(defaultNamespace).Get(t.Context(), secret.Name, metav1.GetOptions{})
+		require.NoError(t, getErr)
+		existing.Data = secret.Data
+		_, err = clientset.CoreV1().Secrets(defaultNamespace).Update(t.Context(), existing, metav1.UpdateOptions{})
+	}
 	require.NoError(t, err)
 
 	discoveryClient := memory.NewMemCacheClient(clientset.Discovery())

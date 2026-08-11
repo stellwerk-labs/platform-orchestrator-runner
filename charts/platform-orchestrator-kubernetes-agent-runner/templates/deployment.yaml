@@ -36,66 +36,61 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/opt/runner/runner"]
-          args:
-            - "remote"
+          args: ["remote"]
           envFrom:
-          - configMapRef:
-              name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}
+            - configMapRef:
+                name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}
           env:
-          {{- if and (eq .Values.nats.authType "token") (or .Values.nats.existingSecret .Values.nats.token) }}
-          - name: NATS_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: {{ default (include "platform-orchestrator-kubernetes-agent-runner.fullname" .) .Values.nats.existingSecret }}
-                key: {{ .Values.nats.tokenKey }}
-          {{- end }}
-          {{- if eq .Values.nats.authType "credentials" }}
-          - name: NATS_CREDS_FILE
-            value: /etc/nats-auth/creds
-          {{- end }}
-          {{- if .Values.nats.caEnabled }}
-          - name: NATS_CA_FILE
-            value: /etc/nats-auth/ca.crt
-          {{- end }}
-          {{- with .Values.platformOrchestrator.extraEnvVars }}
-          {{- toYaml . | nindent 10 }}
-          {{- end }}
+            {{- if .Values.gateway.privateKeyExistingSecret }}
+            - name: PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gateway.privateKeyExistingSecret | quote }}
+                  key: {{ .Values.gateway.privateKeyKey }}
+            {{- end }}
+            {{- if .Values.gateway.clientCertificateExistingSecret }}
+            - name: RUNNER_GATEWAY_CLIENT_CERT_FILE
+              value: /etc/runner-gateway/tls.crt
+            - name: RUNNER_GATEWAY_CLIENT_KEY_FILE
+              value: /etc/runner-gateway/tls.key
+            {{- end }}
+            {{- with .Values.platformOrchestrator.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if or .Values.outbox.enabled .Values.volumeMounts (and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled)) }}
+          {{- if or .Values.gateway.caExistingSecret .Values.gateway.clientCertificateExistingSecret .Values.volumeMounts }}
           volumeMounts:
-            {{- if .Values.outbox.enabled }}
-            - name: nats-outbox
-              mountPath: /var/lib/platform-orchestrator-runner/outbox
-            {{- end }}
-            {{- if and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled) }}
-            - name: nats-auth
-              mountPath: /etc/nats-auth
+            {{- if or .Values.gateway.caExistingSecret .Values.gateway.clientCertificateExistingSecret }}
+            - name: gateway-tls
+              mountPath: /etc/runner-gateway
               readOnly: true
             {{- end }}
             {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.outbox.enabled .Values.volumes (and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled)) }}
+      {{- if or .Values.gateway.caExistingSecret .Values.gateway.clientCertificateExistingSecret .Values.volumes }}
       volumes:
-        {{- if .Values.outbox.enabled }}
-        - name: nats-outbox
-          persistentVolumeClaim:
-            claimName: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . }}-outbox
-        {{- end }}
-        {{- if and .Values.nats.existingSecret (or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled) }}
-        - name: nats-auth
-          secret:
-            secretName: {{ .Values.nats.existingSecret }}
-            items:
-              {{- if eq .Values.nats.authType "credentials" }}
-              - key: {{ .Values.nats.credentialsKey }}
-                path: creds
+        {{- if or .Values.gateway.caExistingSecret .Values.gateway.clientCertificateExistingSecret }}
+        - name: gateway-tls
+          projected:
+            sources:
+              {{- if .Values.gateway.caExistingSecret }}
+              - secret:
+                  name: {{ .Values.gateway.caExistingSecret }}
+                  items:
+                    - key: {{ .Values.gateway.caKey }}
+                      path: ca.crt
               {{- end }}
-              {{- if .Values.nats.caEnabled }}
-              - key: {{ .Values.nats.caKey }}
-                path: ca.crt
+              {{- if .Values.gateway.clientCertificateExistingSecret }}
+              - secret:
+                  name: {{ .Values.gateway.clientCertificateExistingSecret }}
+                  items:
+                    - key: {{ .Values.gateway.clientCertificateKey }}
+                      path: tls.crt
+                    - key: {{ .Values.gateway.clientKeyKey }}
+                      path: tls.key
               {{- end }}
         {{- end }}
         {{- with .Values.volumes }}

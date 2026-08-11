@@ -18,9 +18,7 @@ spec:
       - name: platform-orchestrator-runner
         image: stellwerk-labs/platform-orchestrator-runner:test
         command: ["/opt/runner/runner"]
-        args:
-          - "--nats-url=nats://nats:4222"
-          - "remote"
+        args: ["remote"]
         env:
         - name: RUNNER_ID
           value: remote-runner
@@ -30,8 +28,13 @@ spec:
           value: debug
         - name: K8S_RUNNER_POD_SCHEDULING_DELAY
           value: 5s
-        - name: NATS_JOB_CREDENTIALS_SECRET
-          value: ""
+        - name: RUNNER_GATEWAY_URL
+          value: http://runner-gateway:8080/runner-gateway
+        - name: PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: runner-identity
+              key: private-key.pem
         resources:
           limits:
             cpu: "1"

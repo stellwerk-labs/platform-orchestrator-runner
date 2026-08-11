@@ -2,8 +2,8 @@ apiVersion: v2
 name: platform-orchestrator-kubernetes-agent-runner
 description: A Helm chart for the Platform Orchestrator Kubernetes Agent Runner
 type: application
-version: 0.2.0
-appVersion: "v2.0.0"
+version: 0.3.0
+appVersion: "v3.0.0"
 
 dependencies:
   - name: nats
