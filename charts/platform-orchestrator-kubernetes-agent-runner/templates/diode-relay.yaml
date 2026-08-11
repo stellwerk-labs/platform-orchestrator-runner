@@ -4,7 +4,7 @@
 {{- if not .Values.diode.signingKeyExistingSecret }}{{ fail "diode.signingKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
 {{- if not .Values.diode.verificationKeyExistingSecret }}{{ fail "diode.verificationKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
 {{- if and (eq .Values.diode.role "central") (not .Values.diode.commandSubject) }}{{ fail "diode.commandSubject must be the exact airgap runner command subject when diode.role=central" }}{{ end }}
-{{- $natsURL := .Values.nats.url }}
+{{- $natsURL := .Values.airgap.nats.url }}
 {{- if and (eq .Values.diode.role "protected") (index .Values "protected-nats" "enabled") (not $natsURL) }}
 {{- $natsURL = printf "nats://%s-protected-nats:4222" .Release.Name }}
 {{- end }}
@@ -46,7 +46,7 @@ spec:
             - {name: DIODE_LEDGER_PATH, value: /diode/forward/imported.ledger}
             - {name: DIODE_VERIFY_KEY_FILE, value: /keys/verify/key.pem}
             - {name: DIODE_EXPECT_ATTACHMENT, value: bundle}
-            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
           {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
         - name: reverse-event-exporter
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -61,7 +61,7 @@ spec:
             - {name: DIODE_LEDGER_PATH, value: /diode/reverse/events.ledger}
             - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
             - {name: DIODE_ATTACH_OBJECT, value: log}
-            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
           {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
         {{- else }}
         - name: forward-command-exporter
@@ -78,7 +78,7 @@ spec:
             - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
             - {name: DIODE_ATTACH_OBJECT, value: bundle}
             - {name: NATS_BUNDLE_BUCKET, value: PO_RUNNER_BUNDLES}
-            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
           {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
         - name: reverse-importer
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -92,7 +92,7 @@ spec:
             - {name: DIODE_LEDGER_PATH, value: /diode/reverse/imported.ledger}
             - {name: DIODE_VERIFY_KEY_FILE, value: /keys/verify/key.pem}
             - {name: DIODE_EXPECT_ATTACHMENT, value: log}
-            {{- include "platform-orchestrator-kubernetes-agent-runner.diodeTokenEnv" . | nindent 12 }}
+            {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
           {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
         {{- end }}
       volumes:
@@ -111,17 +111,17 @@ spec:
             items:
               - key: {{ .Values.diode.verificationKey }}
                 path: key.pem
-        {{- if or (eq .Values.nats.authType "credentials") .Values.nats.caEnabled }}
+        {{- if or (eq .Values.airgap.nats.authType "credentials") .Values.airgap.nats.caEnabled }}
         - name: nats-auth
           secret:
-            secretName: {{ required "nats.existingSecret is required for diode credentials/CA" .Values.nats.existingSecret }}
+            secretName: {{ required "airgap.nats.existingSecret is required for diode credentials/CA" .Values.airgap.nats.existingSecret }}
             items:
-              {{- if eq .Values.nats.authType "credentials" }}
-              - key: {{ .Values.nats.credentialsKey }}
+              {{- if eq .Values.airgap.nats.authType "credentials" }}
+              - key: {{ .Values.airgap.nats.credentialsKey }}
                 path: creds
               {{- end }}
-              {{- if .Values.nats.caEnabled }}
-              - key: {{ .Values.nats.caKey }}
+              {{- if .Values.airgap.nats.caEnabled }}
+              - key: {{ .Values.airgap.nats.caKey }}
                 path: ca.crt
               {{- end }}
         {{- end }}

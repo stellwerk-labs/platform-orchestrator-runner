@@ -8,13 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/stellwerk-labs/golib/hmessaging"
-	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 
 	"github.com/pkg/errors"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/gatewayapi"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/kubernetesjob"
 
 	v1 "k8s.io/api/batch/v1"
@@ -26,6 +25,14 @@ import (
 )
 
 var ErrConflict = errors.New("Message already handled")
+
+type remoteGateway interface {
+	NextCommand(ctx context.Context) (gatewayapi.CommandResponse, error)
+	Acknowledge(ctx context.Context, commandID, receipt string) error
+	Retry(ctx context.Context, commandID, receipt string, delay time.Duration) error
+	Reject(ctx context.Context, commandID, receipt, reason string) error
+	PublishEvent(ctx context.Context, event hmessaging.EventEnvelope) error
+}
 
 // ExecuteRemoteMode consumes durable runner commands and creates Kubernetes Jobs.
 func ExecuteRemoteMode(ctx context.Context, cfg *config.RemoteModeConfiguration, programLevel *slog.LevelVar) error {
@@ -41,74 +48,63 @@ func ExecuteRemoteMode(ctx context.Context, cfg *config.RemoteModeConfiguration,
 		}
 	}
 
-	connection, err := natstransport.Connect(natstransport.Config{
-		URL: cfg.NATS.URL, Token: cfg.NATS.Token, CredentialsFile: cfg.NATS.CredentialsFile,
-		CAFile: cfg.NATS.CAFile, ClientCertFile: cfg.NATS.ClientCertFile,
-		ClientKeyFile: cfg.NATS.ClientKeyFile, OutboxDir: cfg.NATS.OutboxDir,
-		Name: "platform-orchestrator-runner/" + cfg.RunnerId,
+	client, err := gatewayapi.NewClient(gatewayapi.ClientConfig{
+		BaseURL: cfg.Gateway.URL, OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerId,
+		PrivateKey: []byte(cfg.PrivateKey), CAFile: cfg.Gateway.CAFile,
+		ClientCertFile: cfg.Gateway.ClientCertFile, ClientKeyFile: cfg.Gateway.ClientKeyFile,
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to connect to NATS")
-	}
-	defer connection.Close()
-	publisher, err := natstransport.NewPublisher(connection, cfg.NATS.OutboxDir)
-	if err != nil {
-		return err
-	}
-	consumer, err := natstransport.NewRunnerConsumer(connection, cfg.OrgID, cfg.RunnerId, cfg.NATS.BootstrapStreams)
-	if err != nil {
-		return err
+		return errors.Wrap(err, "configure runner gateway client")
 	}
 	jobs := kubernetesjob.NewK8sJobsClient(k8sClient)
-	flushTicker := time.NewTicker(5 * time.Second)
-	defer flushTicker.Stop()
+	var consecutiveFailures uint64
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-flushTicker.C:
-			if err := publisher.Flush(ctx); err != nil {
-				slog.WarnContext(ctx, "failed to flush NATS outbound spool", "err", err)
-			}
-			if err := natstransport.FlushLogObjects(ctx, connection, cfg.NATS.OutboxDir); err != nil {
-				slog.WarnContext(ctx, "failed to flush NATS log object spool", "err", err)
-			}
-		default:
-		}
-		delivery, err := consumer.Fetch(ctx)
+		delivery, err := client.NextCommand(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if errors.Is(err, gatewayapi.ErrNoCommand) {
+				consecutiveFailures = 0
 				continue
 			}
-			if errors.Is(err, nats.ErrTimeout) {
-				continue
+			if errors.Is(err, context.Canceled) {
+				return ctx.Err()
 			}
-			return errors.Wrap(err, "fetch runner command")
+			consecutiveFailures++
+			delay := retryDelay(consecutiveFailures)
+			slog.WarnContext(ctx, "runner gateway unavailable; retrying", "err", err, "delay", delay)
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+			continue
 		}
-		if err := executeCommand(ctx, cfg, publisher, jobs, delivery); err != nil {
-			slog.ErrorContext(ctx, "failed to execute runner command", "err", err, "message_id", delivery.Message.ID, "attempt", delivery.Attempts)
+		consecutiveFailures = 0
+		if err := executeCommand(ctx, cfg, client, jobs, delivery); err != nil {
+			slog.ErrorContext(ctx, "failed to execute runner command", "err", err, "attempt", delivery.Attempt)
 		}
 	}
 }
 
-func executeCommand(ctx context.Context, cfg *config.RemoteModeConfiguration, publisher *natstransport.Publisher, jobs kubernetesjob.K8sJobsClientInterface, delivery natstransport.Delivery) error {
+func executeCommand(ctx context.Context, cfg *config.RemoteModeConfiguration, client remoteGateway, jobs kubernetesjob.K8sJobsClientInterface, delivery gatewayapi.CommandResponse) error {
 	var envelope hmessaging.CommandEnvelope
-	if err := json.Unmarshal(delivery.Message.Data, &envelope); err != nil {
-		return deadLetter(ctx, publisher, delivery, errors.Wrap(err, "decode command envelope"))
+	if err := json.Unmarshal(delivery.Command, &envelope); err != nil {
+		return rejectCommand(ctx, client, "unknown", delivery.Receipt, errors.Wrap(err, "decode command envelope"))
 	}
 	if envelope.ProtocolVersion != hmessaging.ProtocolVersionV1 || envelope.OrganizationID != cfg.OrgID || envelope.RunnerID != cfg.RunnerId {
-		return deadLetter(ctx, publisher, delivery, errors.New("command envelope identity or protocol version does not match this runner"))
+		return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, errors.New("command envelope identity or protocol version does not match this runner"))
 	}
 	if !envelope.ExpiresAt.IsZero() && time.Now().After(envelope.ExpiresAt) {
-		_ = publishRunnerError(ctx, publisher, envelope, "COMMAND_EXPIRED", "command expired before execution", false)
-		return deadLetter(ctx, publisher, delivery, errors.New("command expired before execution"))
+		_ = publishRunnerError(ctx, client, envelope, "COMMAND_EXPIRED", "command expired before execution", false)
+		return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, errors.New("command expired before execution"))
 	}
 	if envelope.Type != hmessaging.CommandTypeCreateJob {
-		return deadLetter(ctx, publisher, delivery, errors.Errorf("unsupported runner command type %q", envelope.Type))
+		return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, errors.Errorf("unsupported runner command type %q", envelope.Type))
 	}
 	var command hmessaging.CreateJobCommand
 	if err := json.Unmarshal(envelope.Payload, &command); err != nil {
-		return deadLetter(ctx, publisher, delivery, errors.Wrap(err, "decode command payload"))
+		return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, errors.Wrap(err, "decode command payload"))
 	}
 	err := handleCreateJob(ctx, command, jobs, cfg)
 	if errors.Is(err, ErrConflict) {
@@ -116,26 +112,26 @@ func executeCommand(ctx context.Context, cfg *config.RemoteModeConfiguration, pu
 	}
 	if err != nil {
 		if isPermanentJobCreationError(err) {
-			_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), false)
-			return deadLetter(ctx, publisher, delivery, err)
+			_ = publishRunnerError(ctx, client, envelope, "REMOTE_RUNNER", err.Error(), false)
+			return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, err)
 		}
-		if delivery.Attempts >= defaultCommandDeliveries {
-			_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), false)
-			return deadLetter(ctx, publisher, delivery, err)
+		if delivery.Attempt >= defaultCommandDeliveries {
+			_ = publishRunnerError(ctx, client, envelope, "REMOTE_RUNNER", err.Error(), false)
+			return rejectCommand(ctx, client, envelope.CommandID, delivery.Receipt, err)
 		}
-		_ = publishRunnerError(ctx, publisher, envelope, "REMOTE_RUNNER", err.Error(), true)
-		_ = delivery.Nak(retryDelay(delivery.Attempts))
+		_ = publishRunnerError(ctx, client, envelope, "REMOTE_RUNNER", err.Error(), true)
+		_ = client.Retry(ctx, envelope.CommandID, delivery.Receipt, retryDelay(delivery.Attempt))
 		return err
 	}
 	payload, _ := json.Marshal(map[string]string{"job_id": command.JobID, "namespace": command.Namespace})
-	if err := publishEvent(ctx, publisher, envelope, "job-created", payload); err != nil {
-		_ = delivery.Nak(retryDelay(delivery.Attempts))
+	if err := publishEvent(ctx, client, envelope, "job-created", payload); err != nil {
+		_ = client.Retry(ctx, envelope.CommandID, delivery.Receipt, retryDelay(delivery.Attempt))
 		return err
 	}
-	if err := delivery.Ack(); err != nil {
+	if err := client.Acknowledge(ctx, envelope.CommandID, delivery.Receipt); err != nil {
 		return err
 	}
-	go monitorJobScheduling(ctx, cfg, publisher, jobs, envelope, command)
+	go monitorJobScheduling(ctx, cfg, client, jobs, envelope, command)
 	return nil
 }
 
@@ -147,7 +143,7 @@ const (
 func monitorJobScheduling(
 	ctx context.Context,
 	cfg *config.RemoteModeConfiguration,
-	publisher *natstransport.Publisher,
+	publisher remoteGateway,
 	jobs kubernetesjob.K8sJobsClientInterface,
 	envelope hmessaging.CommandEnvelope,
 	command hmessaging.CreateJobCommand,
@@ -232,28 +228,9 @@ func isPermanentJobCreationError(err error) bool {
 		k8serrors.IsUnauthorized(err)
 }
 
-func deadLetter(ctx context.Context, publisher *natstransport.Publisher, delivery natstransport.Delivery, cause error) error {
-	subject, err := hmessaging.DeadLetterSubject(delivery.Message.Subject)
-	if err != nil {
-		_ = delivery.Nak(time.Second)
-		return errors.Wrap(err, "build dead-letter subject")
-	}
-	header := delivery.Message.Header.Clone()
-	if header == nil {
-		header = hmessaging.Header{}
-	}
-	header.Set("Po-Dead-Letter-Reason", cause.Error())
-	dlq := delivery.Message.Clone()
-	dlq.ID += ":dlq"
-	dlq.Subject = subject
-	dlq.Header = header
-	dlq.ExpiresAt = time.Time{}
-	if err := publisher.Publish(context.WithoutCancel(ctx), dlq); err != nil {
-		_ = delivery.Nak(time.Second)
-		return errors.Wrap(err, "publish dead-letter message")
-	}
-	if err := delivery.Term(); err != nil {
-		return errors.Wrap(err, "terminate dead-lettered command")
+func rejectCommand(ctx context.Context, client remoteGateway, commandID, receipt string, cause error) error {
+	if err := client.Reject(context.WithoutCancel(ctx), commandID, receipt, cause.Error()); err != nil {
+		return errors.Wrap(err, "reject runner command")
 	}
 	return cause
 }
@@ -267,25 +244,17 @@ func retryDelay(attempt uint64) time.Duration {
 	return time.Duration(1<<attempt) * time.Second
 }
 
-func publishEvent(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, eventType string, payload []byte) error {
-	subject, err := hmessaging.RunnerEventSubject(command.OrganizationID, command.RunnerID, eventType)
-	if err != nil {
-		return err
-	}
+func publishEvent(ctx context.Context, publisher remoteGateway, command hmessaging.CommandEnvelope, eventType string, payload []byte) error {
 	event := hmessaging.EventEnvelope{
 		ProtocolVersion: hmessaging.ProtocolVersionV1,
 		EventID:         command.CommandID + ":" + eventType, CommandID: command.CommandID,
 		OrganizationID: command.OrganizationID, RunnerID: command.RunnerID,
 		DeploymentID: command.DeploymentID, Type: eventType, CreatedAt: time.Now().UTC(), Payload: payload,
 	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	return publisher.Publish(ctx, hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: event.CreatedAt})
+	return publisher.PublishEvent(ctx, event)
 }
 
-func publishRunnerError(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, code, message string, retryable bool) error {
+func publishRunnerError(ctx context.Context, publisher remoteGateway, command hmessaging.CommandEnvelope, code, message string, retryable bool) error {
 	payload, _ := json.Marshal(map[string]interface{}{"job_id": command.DeploymentID, "code": code, "message": message, "retryable": retryable})
 	eventType := "runner-error-terminal"
 	if retryable {
@@ -294,22 +263,14 @@ func publishRunnerError(ctx context.Context, publisher *natstransport.Publisher,
 	return publishEventAs(ctx, publisher, command, "runner-error", eventType, payload)
 }
 
-func publishEventAs(ctx context.Context, publisher *natstransport.Publisher, command hmessaging.CommandEnvelope, eventType, eventIDSuffix string, payload []byte) error {
-	subject, err := hmessaging.RunnerEventSubject(command.OrganizationID, command.RunnerID, eventType)
-	if err != nil {
-		return err
-	}
+func publishEventAs(ctx context.Context, publisher remoteGateway, command hmessaging.CommandEnvelope, eventType, eventIDSuffix string, payload []byte) error {
 	event := hmessaging.EventEnvelope{
 		ProtocolVersion: hmessaging.ProtocolVersionV1,
 		EventID:         command.CommandID + ":" + eventIDSuffix, CommandID: command.CommandID,
 		OrganizationID: command.OrganizationID, RunnerID: command.RunnerID,
 		DeploymentID: command.DeploymentID, Type: eventType, CreatedAt: time.Now().UTC(), Payload: payload,
 	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	return publisher.Publish(ctx, hmessaging.Message{ID: event.EventID, Subject: subject, Data: data, CreatedAt: event.CreatedAt})
+	return publisher.PublishEvent(ctx, event)
 }
 
 func handleCreateJob(ctx context.Context, command hmessaging.CreateJobCommand, k8sClient kubernetesjob.K8sJobsClientInterface, cfg *config.RemoteModeConfiguration) error {
@@ -325,7 +286,7 @@ func handleCreateJob(ctx context.Context, command hmessaging.CreateJobCommand, k
 	if err := json.Unmarshal(jobSpecJSON, &jobSpec); err != nil {
 		return errors.Wrap(err, "failed to unmarshal job spec")
 	}
-	injectJobNATSConfiguration(&jobSpec, cfg)
+	injectJobGatewayConfiguration(&jobSpec, cfg)
 	if _, err := k8sClient.CreateJob(ctx, command.Namespace, &v1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: command.JobID, Namespace: command.Namespace},
 		Spec:       jobSpec,
@@ -340,80 +301,57 @@ func handleCreateJob(ctx context.Context, command hmessaging.CreateJobCommand, k
 	return nil
 }
 
-func injectJobNATSConfiguration(jobSpec *v1.JobSpec, cfg *config.RemoteModeConfiguration) {
-	url := cfg.NATS.URL
+func injectJobGatewayConfiguration(jobSpec *v1.JobSpec, cfg *config.RemoteModeConfiguration) {
+	url := cfg.Gateway.URL
 	if url == "" {
 		return
 	}
 	common := []corev1.EnvVar{
-		{Name: "NATS_URL", Value: url},
+		{Name: "RUNNER_GATEWAY_URL", Value: url},
 		{Name: "ORG_ID", Value: cfg.OrgID},
 		{Name: "RUNNER_ID", Value: cfg.RunnerId},
 	}
-	outboxPVC := os.Getenv("NATS_JOB_OUTBOX_PVC")
+	outboxPVC := os.Getenv("RUNNER_GATEWAY_JOB_OUTBOX_PVC")
 	if outboxPVC != "" {
-		common = append(common, corev1.EnvVar{Name: "NATS_OUTBOX_DIR", Value: "/var/lib/platform-orchestrator-runner/outbox"})
+		common = append(common, corev1.EnvVar{Name: "RUNNER_GATEWAY_OUTBOX_DIR", Value: "/var/lib/platform-orchestrator-runner/outbox"})
 		jobSpec.Template.Spec.Volumes = append(jobSpec.Template.Spec.Volumes, corev1.Volume{
-			Name:         "nats-outbox",
+			Name:         "runner-gateway-outbox",
 			VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: outboxPVC}},
 		})
 	}
-	secret := os.Getenv("NATS_JOB_CREDENTIALS_SECRET")
-	authType := os.Getenv("NATS_JOB_AUTH_TYPE")
-	if authType == "" {
-		authType = "token"
-	}
-	if secret != "" && authType == "token" {
-		key := os.Getenv("NATS_JOB_TOKEN_KEY")
-		if key == "" {
-			key = "token"
+	caSecret := os.Getenv("RUNNER_GATEWAY_JOB_CA_SECRET")
+	if caSecret != "" {
+		caKey := os.Getenv("RUNNER_GATEWAY_JOB_CA_KEY")
+		if caKey == "" {
+			caKey = "ca.crt"
 		}
-		common = append(common, corev1.EnvVar{Name: "NATS_TOKEN", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secret}, Key: key},
-		}})
-	}
-	if secret != "" && (authType == "credentials" || os.Getenv("NATS_JOB_CA_ENABLED") == "true") {
-		items := []corev1.KeyToPath{}
-		if authType == "credentials" {
-			key := os.Getenv("NATS_JOB_CREDENTIALS_KEY")
-			if key == "" {
-				key = "creds"
-			}
-			items = append(items, corev1.KeyToPath{Key: key, Path: "creds"})
-			common = append(common, corev1.EnvVar{Name: "NATS_CREDS_FILE", Value: "/etc/nats-auth/creds"})
-		}
-		if os.Getenv("NATS_JOB_CA_ENABLED") == "true" {
-			key := os.Getenv("NATS_JOB_CA_KEY")
-			if key == "" {
-				key = "ca.crt"
-			}
-			items = append(items, corev1.KeyToPath{Key: key, Path: "ca.crt"})
-			common = append(common, corev1.EnvVar{Name: "NATS_CA_FILE", Value: "/etc/nats-auth/ca.crt"})
-		}
+		common = append(common, corev1.EnvVar{Name: "RUNNER_GATEWAY_CA_FILE", Value: "/etc/runner-gateway/ca.crt"})
 		jobSpec.Template.Spec.Volumes = append(jobSpec.Template.Spec.Volumes, corev1.Volume{
-			Name: "nats-auth", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
-				SecretName: secret, Items: items,
+			Name: "runner-gateway-ca", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+				SecretName: caSecret, Items: []corev1.KeyToPath{{Key: caKey, Path: "ca.crt"}},
 			}},
 		})
 	}
 	for i := range jobSpec.Template.Spec.Containers {
 		container := &jobSpec.Template.Spec.Containers[i]
 		if outboxPVC != "" {
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "nats-outbox", MountPath: "/var/lib/platform-orchestrator-runner/outbox"})
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "runner-gateway-outbox", MountPath: "/var/lib/platform-orchestrator-runner/outbox"})
 		}
-		if secret != "" && (authType == "credentials" || os.Getenv("NATS_JOB_CA_ENABLED") == "true") {
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "nats-auth", MountPath: "/etc/nats-auth", ReadOnly: true})
+		if caSecret != "" {
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "runner-gateway-ca", MountPath: "/etc/runner-gateway", ReadOnly: true})
 		}
 		for _, variable := range common {
-			found := false
-			for _, existing := range container.Env {
+			found := -1
+			for index, existing := range container.Env {
 				if existing.Name == variable.Name {
-					found = true
+					found = index
 					break
 				}
 			}
-			if !found {
+			if found < 0 {
 				container.Env = append(container.Env, variable)
+			} else {
+				container.Env[found] = variable
 			}
 		}
 	}

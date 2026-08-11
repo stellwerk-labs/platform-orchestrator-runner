@@ -1,0 +1,92 @@
+{{ template "chart.header" . }}
+
+The agent receives durable runner commands through outbound HTTPS. It never
+needs inbound connectivity or NATS credentials.
+
+## Simple mode
+
+Create an Ed25519 identity Secret, then install the chart:
+
+```bash
+kubectl create secret generic runner-identity \
+  --from-file=private-key.pem=runner_private_key.pem
+
+helm install runner oci://ghcr.io/stellwerk-labs/charts/platform-orchestrator-kubernetes-agent-runner \
+  --version {{ .Version }} \
+  --set platformOrchestrator.orgId=my-org \
+  --set platformOrchestrator.runnerId=my-runner \
+  --set gateway.url=https://api.example.com/runner-gateway \
+  --set gateway.privateKeyExistingSecret=runner-identity
+```
+
+The matching public key must be registered in the Orchestrator's
+`kubernetes-agent` runner configuration.
+
+## Edge mode
+
+Use an RWX-capable storage class because the agent-created Jobs and the outbox
+flusher may run on different nodes:
+
+```yaml
+gateway:
+  mode: edge
+  url: https://api.example.com/runner-gateway
+  privateKeyExistingSecret: runner-identity
+outbox:
+  enabled: true
+  storageClassName: rwx-storage
+  size: 5Gi
+```
+
+Install with `helm install runner ... -f edge-values.yaml`. Commands are
+buffered centrally; the PVC buffers results and encrypted logs while HTTPS
+connectivity is unavailable. Monitor PVC capacity and flusher errors.
+
+## Air-gapped mode
+
+Create the protected-side Secrets, then install with an explicit values file:
+
+```bash
+kubectl create secret generic runner-identity \
+  --from-file=private-key.pem=runner_private_key.pem
+
+kubectl create secret generic protected-gateway \
+  --from-file=public-key.pem=runner_public_key.pem \
+  --from-literal=runner-token-salt='<central RUNNER_TOKEN_SALT>' \
+  --from-literal=receipt-key="$(openssl rand -base64 32)"
+
+kubectl create secret generic protected-nats-credentials \
+  --from-literal=token="$(openssl rand -base64 32)"
+```
+
+```yaml
+platformOrchestrator:
+  orgId: my-org
+  runnerId: my-runner
+gateway:
+  mode: airgap
+  privateKeyExistingSecret: runner-identity
+protected-nats:
+  enabled: true
+  container:
+    env:
+      NATS_AUTH_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: protected-nats-credentials
+            key: token
+airgap:
+  gatewaySecret: protected-gateway
+  nats:
+    existingSecret: protected-nats-credentials
+```
+
+The chart deploys a protected-side HTTPS gateway and broker. The central
+`RUNNER_TOKEN_SALT` is sensitive authentication material and must cross the
+boundary through an approved secret-transfer procedure. Configure the diode
+relay resources separately for both directions. This mode is not qualified
+with a physical diode by the chart test suite.
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}

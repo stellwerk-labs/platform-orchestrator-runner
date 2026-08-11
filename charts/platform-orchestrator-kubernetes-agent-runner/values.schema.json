@@ -111,21 +111,46 @@
       "title": "namespaceOverride",
       "type": "string"
     },
-    "nats": {
+    "gateway": {
       "additionalProperties": false,
       "properties": {
         "mode": {"enum": ["simple", "edge", "airgap"], "type": "string"},
         "url": {"type": "string"},
-        "authType": {"enum": ["token", "credentials"], "type": "string"},
-        "token": {"type": "string"},
-        "existingSecret": {"type": "string"},
-        "tokenKey": {"type": "string"},
-        "credentialsKey": {"type": "string"},
+        "privateKeyExistingSecret": {"type": "string"},
+        "privateKeyKey": {"type": "string"},
+        "caExistingSecret": {"type": "string"},
         "caKey": {"type": "string"},
-        "caEnabled": {"type": "boolean"},
-        "jobCredentialsExistingSecret": {"type": "string"}
+        "clientCertificateExistingSecret": {"type": "string"},
+        "clientCertificateKey": {"type": "string"},
+        "clientKeyKey": {"type": "string"},
+        "jobCaExistingSecret": {"type": "string"}
       },
-      "required": ["mode", "url", "authType", "token", "existingSecret", "tokenKey", "credentialsKey", "caKey", "caEnabled", "jobCredentialsExistingSecret"],
+      "required": ["mode", "url", "privateKeyExistingSecret", "privateKeyKey", "caExistingSecret", "caKey", "clientCertificateExistingSecret", "clientCertificateKey", "clientKeyKey", "jobCaExistingSecret"],
+      "type": "object"
+    },
+    "airgap": {
+      "additionalProperties": false,
+      "properties": {
+        "gatewaySecret": {"type": "string"},
+        "publicKeyKey": {"type": "string"},
+        "runnerTokenSaltKey": {"type": "string"},
+        "receiptKeyKey": {"type": "string"},
+        "nats": {
+          "additionalProperties": false,
+          "properties": {
+            "url": {"type": "string"},
+            "authType": {"enum": ["token", "credentials"], "type": "string"},
+            "existingSecret": {"type": "string"},
+            "tokenKey": {"type": "string"},
+            "credentialsKey": {"type": "string"},
+            "caKey": {"type": "string"},
+            "caEnabled": {"type": "boolean"}
+          },
+          "required": ["url", "authType", "existingSecret", "tokenKey", "credentialsKey", "caKey", "caEnabled"],
+          "type": "object"
+        }
+      },
+      "required": ["gatewaySecret", "publicKeyKey", "runnerTokenSaltKey", "receiptKeyKey", "nats"],
       "type": "object"
     },
     "outbox": {

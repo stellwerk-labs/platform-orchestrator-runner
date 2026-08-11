@@ -36,7 +36,7 @@ func createJobCommand() hmessaging.CreateJobCommand {
 func remoteModeConfig() *config.RemoteModeConfiguration {
 	return &config.RemoteModeConfiguration{
 		OrgID: "test-org", RunnerId: "remote-runner",
-		NATS: config.NATSConfiguration{URL: "nats://broker:4222"},
+		Gateway: config.GatewayClientConfiguration{URL: "https://gateway.example.com/runner-gateway"},
 	}
 }
 
@@ -47,7 +47,7 @@ func TestHandleCreateJobSuccess(t *testing.T) {
 			require.Equal(t, "job-id", job.Name)
 			require.Equal(t, "default", job.Namespace)
 			require.Len(t, job.Spec.Template.Spec.Containers, 1)
-			require.Contains(t, job.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "NATS_URL", Value: "nats://broker:4222"})
+			require.Contains(t, job.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "RUNNER_GATEWAY_URL", Value: "https://gateway.example.com/runner-gateway"})
 			require.Contains(t, job.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "ORG_ID", Value: "test-org"})
 			require.Contains(t, job.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "RUNNER_ID", Value: "remote-runner"})
 			return &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: job.Name}}, nil

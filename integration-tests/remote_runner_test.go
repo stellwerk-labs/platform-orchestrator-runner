@@ -29,11 +29,11 @@ func TestRemoteRunner_Success(t *testing.T) {
 	orgId := MustCreateOrgId(t, internalCpClient)
 	cpClient := MustControlPlaneClient(t)
 	projectId := MustCreateProject(t, cpClient, orgId, "my-project").Id
-	MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "platform-orchestrator-runner")
+	_, privateKey := MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "platform-orchestrator-runner")
 	envType := MustCreateEnvType(t, cpClient, orgId, "dev").Id
 	env := MustCreateEnv(t, cpClient, orgId, envType, projectId, "my-env")
 	envId := env.Id
-	MustDeployRemoteRunner(t, orgId)
+	MustDeployRemoteRunner(t, orgId, privateKey)
 
 	t.Logf("using org %s", orgId)
 
@@ -243,10 +243,10 @@ func TestRemoteRunner_Failure(t *testing.T) {
 	orgId := MustCreateOrgId(t, internalCpClient)
 	cpClient := MustControlPlaneClient(t)
 	projectId := MustCreateProject(t, cpClient, orgId, "my-project").Id
-	MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "platform-orchestrator-runner")
+	_, privateKey := MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "platform-orchestrator-runner")
 	envType := MustCreateEnvType(t, cpClient, orgId, "dev").Id
 	envId := MustCreateEnv(t, cpClient, orgId, envType, projectId, "my-env").Id
-	MustDeployRemoteRunner(t, orgId)
+	MustDeployRemoteRunner(t, orgId, privateKey)
 
 	t.Logf("using org %s", orgId)
 
@@ -320,10 +320,10 @@ func TestRemoteRunner_Failure_job_creation(t *testing.T) {
 	orgId := MustCreateOrgId(t, internalCpClient)
 	cpClient := MustControlPlaneClient(t)
 	projectId := MustCreateProject(t, cpClient, orgId, "my-project").Id
-	MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, "not-existing-namespace", "platform-orchestrator-runner")
+	_, privateKey := MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, "not-existing-namespace", "platform-orchestrator-runner")
 	envType := MustCreateEnvType(t, cpClient, orgId, "dev").Id
 	envId := MustCreateEnv(t, cpClient, orgId, envType, projectId, "my-env").Id
-	MustDeployRemoteRunner(t, orgId)
+	MustDeployRemoteRunner(t, orgId, privateKey)
 
 	t.Logf("using org %s", orgId)
 
@@ -382,10 +382,10 @@ func TestRemoteRunner_ServiceAccount_NotExisting(t *testing.T) {
 	orgId := MustCreateOrgId(t, internalCpClient)
 	cpClient := MustControlPlaneClient(t)
 	projectId := MustCreateProject(t, cpClient, orgId, "my-project").Id
-	MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "not-existing-service-account")
+	_, privateKey := MustCreateRemoteRunnerWithRule(t, cpClient, orgId, runnerId, projectId, defaultNamespace, "not-existing-service-account")
 	envType := MustCreateEnvType(t, cpClient, orgId, "dev").Id
 	envId := MustCreateEnv(t, cpClient, orgId, envType, projectId, "my-env").Id
-	MustDeployRemoteRunner(t, orgId)
+	MustDeployRemoteRunner(t, orgId, privateKey)
 
 	t.Logf("using org %s", orgId)
 

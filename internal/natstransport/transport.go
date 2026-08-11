@@ -6,15 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -34,7 +29,6 @@ type Config struct {
 	CAFile          string
 	ClientCertFile  string
 	ClientKeyFile   string
-	OutboxDir       string
 	Name            string
 	ConnectTimeout  time.Duration
 }
@@ -81,149 +75,31 @@ func Connect(config Config) (*nats.Conn, error) {
 
 type Publisher struct {
 	publisher hmessaging.Publisher
-	outboxDir string
-	mu        sync.Mutex
 }
 
-func NewPublisher(connection *nats.Conn, outboxDir string) (*Publisher, error) {
+func NewPublisher(connection *nats.Conn) (*Publisher, error) {
 	js, err := hnats.NewJetStream(connection)
 	if err != nil {
 		return nil, fmt.Errorf("create JetStream publisher: %w", err)
 	}
-	publisher := &Publisher{publisher: hnats.NewPublisher(js, "", nil), outboxDir: outboxDir}
-	if outboxDir != "" {
-		if err := os.MkdirAll(outboxDir, 0o700); err != nil {
-			return nil, fmt.Errorf("create NATS outbox: %w", err)
-		}
-	}
-	return publisher, nil
-}
-
-// PublishMessage also persists the message when the process cannot establish
-// its initial NATS connection. Short-lived edge Jobs cannot rely on a later
-// reconnect callback because they may exit immediately after publishing.
-func PublishMessage(ctx context.Context, config Config, message hmessaging.Message) error {
-	connection, err := Connect(config)
-	if err == nil {
-		defer connection.Close()
-		publisher, publisherErr := NewPublisher(connection, config.OutboxDir)
-		if publisherErr == nil {
-			return publisher.Publish(ctx, message)
-		}
-		err = publisherErr
-	}
-	if config.OutboxDir == "" {
-		return err
-	}
-	publisher := &Publisher{outboxDir: config.OutboxDir}
-	if err := os.MkdirAll(config.OutboxDir, 0o700); err != nil {
-		return err
-	}
-	if spoolErr := publisher.spool(message); spoolErr != nil {
-		return fmt.Errorf("connect or initialize NATS publisher: %w; persist outbox message: %v", err, spoolErr)
-	}
-	return nil
+	return &Publisher{publisher: hnats.NewPublisher(js, "", nil)}, nil
 }
 
 func (p *Publisher) Publish(ctx context.Context, message hmessaging.Message) error {
 	if err := message.Validate(); err != nil {
 		return err
 	}
-	if err := p.publish(ctx, message); err != nil {
-		if p.outboxDir == "" {
-			return err
-		}
-		if spoolErr := p.spool(message); spoolErr != nil {
-			return fmt.Errorf("publish NATS message: %w; persist outbox message: %v", err, spoolErr)
-		}
-		slog.WarnContext(ctx, "NATS unavailable, message persisted to outbound spool", "message_id", message.ID, "subject", message.Subject)
-	}
-	return nil
-}
-
-func (p *Publisher) publish(ctx context.Context, message hmessaging.Message) error {
 	return p.publisher.Publish(ctx, message)
 }
 
-func (p *Publisher) spool(message hmessaging.Message) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	data, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-	sum := sha256.Sum256([]byte(message.ID))
-	name := hex.EncodeToString(sum[:]) + ".json"
-	temporary, err := os.CreateTemp(p.outboxDir, ".pending-*")
-	if err != nil {
-		return err
-	}
-	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
-	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryName, filepath.Join(p.outboxDir, name)); err != nil {
-		return err
-	}
-	return syncDir(p.outboxDir)
-}
-
-func (p *Publisher) Flush(ctx context.Context) error {
-	if p.outboxDir == "" {
-		return nil
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	entries, err := os.ReadDir(p.outboxDir)
-	if err != nil {
-		return err
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(p.outboxDir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var message hmessaging.Message
-		if err := json.Unmarshal(data, &message); err != nil {
-			return fmt.Errorf("decode outbound message %s: %w", entry.Name(), err)
-		}
-		if err := p.publish(ctx, message); err != nil {
-			return err
-		}
-		if err := os.Remove(path); err != nil {
-			return err
-		}
-		if err := syncDir(p.outboxDir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type Delivery struct {
-	Message  hmessaging.Message
-	Attempts uint64
-	ack      func() error
-	nak      func(time.Duration) error
-	term     func() error
+	Message        hmessaging.Message
+	Attempts       uint64
+	AckSubject     string
+	StreamSequence uint64
+	ack            func() error
+	nak            func(time.Duration) error
+	term           func() error
 }
 
 func NewDelivery(message hmessaging.Message, attempts uint64, ack func() error, nak func(time.Duration) error, term func() error) Delivery {
@@ -332,9 +208,11 @@ func (c *Consumer) Fetch(ctx context.Context) (Delivery, error) {
 			CreatedAt: createdAt,
 			ExpiresAt: expiresAt,
 		},
-		Attempts: metadata.NumDelivered,
-		ack:      func() error { return message.Ack() },
-		nak:      func(delay time.Duration) error { return message.NakWithDelay(delay) },
-		term:     func() error { return message.Term() },
+		Attempts:       metadata.NumDelivered,
+		AckSubject:     message.Reply,
+		StreamSequence: metadata.Sequence.Stream,
+		ack:            func() error { return message.Ack() },
+		nak:            func(delay time.Duration) error { return message.NakWithDelay(delay) },
+		term:           func() error { return message.Term() },
 	}, nil
 }

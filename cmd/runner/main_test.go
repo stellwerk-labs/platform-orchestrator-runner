@@ -37,30 +37,31 @@ func TestMainInner(t *testing.T) {
 		require.ErrorContains(t, err, "failed to read standard mode config")
 	})
 
-	t.Run("Standard Mode - fails when NATS URL flag is set", func(t *testing.T) {
+	t.Run("Standard Mode - fails when gateway URL flag is set", func(t *testing.T) {
 		oldArgs := os.Args
 		defer func() { os.Args = oldArgs }()
 
-		os.Args = []string{"runner", "--nats-url=nats://localhost:4222", "standard"}
+		os.Args = []string{"runner", "--gateway-url=https://gateway.example.com/runner-gateway", "standard"}
 		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 		_, err := mainInner(context.Background(), limitedLogsBuffer)
-		require.ErrorContains(t, err, "standard mode does not allow --nats-url parameter")
+		require.ErrorContains(t, err, "standard mode does not allow --gateway-url parameter")
 	})
 
-	t.Run("Remote Mode - runner with remote and NATS URL triggers remote mode", func(t *testing.T) {
+	t.Run("Remote Mode - runner with remote and gateway URL triggers remote mode", func(t *testing.T) {
 		oldArgs := os.Args
 		defer func() { os.Args = oldArgs }()
 
-		os.Args = []string{"runner", "--nats-url=nats://localhost:4222", "remote"}
+		os.Args = []string{"runner", "--gateway-url=https://gateway.example.com/runner-gateway", "remote"}
 		t.Setenv("ORG_ID", "test-org")
 		t.Setenv("RUNNER_ID", "remote-runner")
-		t.Setenv("NATS_URL", "")
+		t.Setenv("PRIVATE_KEY", "private-key")
+		t.Setenv("RUNNER_GATEWAY_URL", "")
 		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 		_, err := mainInner(context.Background(), limitedLogsBuffer)
 		require.Error(t, err)
-		require.NotContains(t, err.Error(), "NATS_URL is required")
+		require.NotContains(t, err.Error(), "RUNNER_GATEWAY_URL is required")
 	})
 
 	t.Run("Remote Mode - requires an endpoint when none is configured", func(t *testing.T) {
@@ -69,11 +70,12 @@ func TestMainInner(t *testing.T) {
 
 		t.Setenv("ORG_ID", "test-org")
 		t.Setenv("RUNNER_ID", "remote-runner")
+		t.Setenv("PRIVATE_KEY", "private-key")
 		os.Args = []string{"runner", "remote"}
 		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 		_, err := mainInner(context.Background(), limitedLogsBuffer)
-		require.ErrorContains(t, err, "NATS_URL is required")
+		require.ErrorContains(t, err, "RUNNER_GATEWAY_URL is required")
 	})
 
 	t.Run("Invalid Mode - fails when unknown mode is provided", func(t *testing.T) {

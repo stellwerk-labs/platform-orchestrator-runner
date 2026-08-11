@@ -101,6 +101,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - run: make test-integration
+        env:
+          DP_IMAGE: ${{ vars.DP_INTEGRATION_IMAGE || 'ghcr.io/stellwerk-labs/platform-orchestrator-dp:v3.0.0' }}
 
       - name: Show integration test logs
         run: |
@@ -154,5 +156,8 @@ jobs:
     - name: Helm Template
       run: |
         helm template platform-orchestrator-kubernetes-agent-runner ./charts/platform-orchestrator-kubernetes-agent-runner
+
+    - name: Test runner gateway modes
+      run: bash scripts/chart-gateway-modes_test.sh
 
   

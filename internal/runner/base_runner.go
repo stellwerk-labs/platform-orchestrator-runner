@@ -37,11 +37,11 @@ func (r *baseRunner) CreateIaCFolder(ctx context.Context) error {
 	if r.bundleLoader != nil {
 		bundle, err := r.bundleLoader(ctx)
 		if err != nil {
-			return errors.Wrap(err, "failed to obtain deployment bundle from NATS Object Store")
+			return errors.Wrap(err, "failed to obtain deployment bundle from runner gateway")
 		}
 		return errors.Wrapf(unarchiveBundleToFolder(bundle, r.folder), "failed to unbundle the archive and store it in %s", r.folder)
 	}
-	return errors.New("NATS Object Store bundle loader is not configured")
+	return errors.New("runner gateway bundle loader is not configured")
 }
 
 // Version returns the version string reported by the configured binary.
