@@ -143,7 +143,10 @@ jobs:
       run: |
         helm repo add nats https://nats-io.github.io/k8s/helm/charts/
         helm dependency build ./charts/platform-orchestrator-kubernetes-agent-runner
-        
+
+    - name: Test chart metadata parser
+      run: bash scripts/chart-metadata_test.sh
+
     - name: Helm Lint
       run: |
         helm lint ./charts/platform-orchestrator-kubernetes-agent-runner
