@@ -34,8 +34,9 @@ jobs:
       - name: Get chart name and version
         id: get_name_version
         run: |
-          name=$(cat charts/platform-orchestrator-kubernetes-agent-runner/Chart.yaml | grep "name:" | sed 's/name://g' | tr -d '[:space:]')
-          version=$(cat charts/platform-orchestrator-kubernetes-agent-runner/Chart.yaml | grep "version:" | sed 's/version://g' | tr -d '[:space:]')
+          chart=charts/platform-orchestrator-kubernetes-agent-runner/Chart.yaml
+          name=$(bash scripts/chart-metadata.sh "$chart" name)
+          version=$(bash scripts/chart-metadata.sh "$chart" version)
 
           if [[ "${{ github.event_name }}" == "push" ]]; then
             expected_tag="chart-v${version}"
