@@ -51,10 +51,6 @@ jobs:
 
   test-integration:
     runs-on: ubuntu-latest
-    env:
-      CP_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-cp:nats-candidate
-      DP_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-dp:nats-candidate
-      IAM_IMAGE: ghcr.io/stellwerk-labs/platform-orchestrator-iam:nats-candidate
     permissions:
       contents: "read"
       id-token: "write"
