@@ -9,7 +9,7 @@ RUNNER_CONFIGURATION := runner_config.json
 
 CP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-cp:v2.0.0
 DP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-dp:v3.0.0
-IAM_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-iam:v2.0.0
+IAM_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-iam:v2.1.0
 SERVICE_PLATFORM ?=
 PULL_FLAGS ?=
 
