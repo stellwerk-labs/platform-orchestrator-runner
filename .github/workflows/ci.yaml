@@ -67,7 +67,7 @@ jobs:
 
       - name: Go cache for Docker
         id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             go-build-cache
