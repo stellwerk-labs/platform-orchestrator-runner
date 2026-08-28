@@ -24,7 +24,7 @@ jobs:
       contents: write
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Helm
         uses: azure/setup-helm@v5
       - name: Add NATS chart repository
