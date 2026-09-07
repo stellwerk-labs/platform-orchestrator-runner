@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/integration-tests/clients/platformorchestratorcp"
@@ -16,7 +15,7 @@ import (
 
 // Module Management is Core functionality. Runner fixtures publish an explicit
 // managed version and promote it before resolving a deployment through a rule.
-func createManagedModuleWithResponse(t *testing.T, client platformorchestratorcp.ClientWithResponsesInterface, orgID string, body platformorchestratorcp.ModuleCreateBody) (*platformorchestratorcp.CreateModuleResponse, error) {
+func createManagedModuleWithResponse(t *testing.T, client platformorchestratorcp.ClientWithResponsesInterface, orgID string, body platformorchestratorcp.ModuleCreateBody, outputNames ...string) (*platformorchestratorcp.CreateModuleResponse, error) {
 	t.Helper()
 	response, err := client.CreateModuleWithResponse(t.Context(), orgID, body, func(_ context.Context, request *http.Request) error {
 		var payload map[string]any
@@ -24,10 +23,13 @@ func createManagedModuleWithResponse(t *testing.T, client platformorchestratorcp
 			return err
 		}
 		payload["semantic_version"] = "1.0.0"
-		if body.ModuleSourceCode == nil {
-			// Fixture claim only. Trusted artifact verification is deferred.
-			payload["artifact_digest"] = "sha256:" + strings.Repeat("0", 64)
+		// The fixture author declares the known string outputs, rather than
+		// copying the server contract or inventing an external digest.
+		properties := map[string]any{}
+		for _, name := range outputNames {
+			properties[name] = map[string]any{"type": "string"}
 		}
+		payload["output_schema"] = map[string]any{"type": "object", "properties": properties}
 		encoded, err := json.Marshal(payload)
 		if err != nil {
 			return err

@@ -54,7 +54,7 @@ func TestIaCBackend_TerraformBinaryNotFound(t *testing.T) {
 				"prefix":  "${context.project_id}-${context.env_id}",
 				"project": "my-gcp-project",
 			},
-		})
+		}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
@@ -140,7 +140,7 @@ func TestIaCBackend_OpenTofuExplicitlySet(t *testing.T) {
 				"prefix":  "${context.project_id}-${context.env_id}",
 				"project": "my-gcp-project",
 			},
-		})
+		}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}

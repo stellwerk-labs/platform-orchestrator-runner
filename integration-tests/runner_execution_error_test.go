@@ -41,7 +41,7 @@ func TestMissingOutputsError(t *testing.T) {
 	}
 	{
 		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: moduleId, ResourceType: "k8s-namespace",
-			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
+			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
@@ -242,7 +242,7 @@ variable "prefix" {
 output "name" {
   value = "${var.prefix}-namespace"
 }
-`)})
+`)}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 		moduleVersionId = res.JSON201.VersionId
@@ -344,7 +344,7 @@ output "workload_type" {
 `),
 			ModuleInputs: map[string]interface{}{"metadata": map[string]interface{}{
 				"name": "score-ns",
-			}}})
+			}}}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
@@ -522,7 +522,7 @@ func TestModuleError_WrongSourceCode(t *testing.T) {
 			Id:           "inline-k8s-namespace",
 			ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("git::https://github.com/stellwerk-labs/module-definition-library.git//score-workload/aws-lambdas"),
-		})
+		}, "name")
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
@@ -650,7 +650,7 @@ output "name" {
 `),
 			ModuleInputs:    map[string]interface{}{"trigger-error": true},
 			ProviderMapping: map[string]string{"kubernetes": fmt.Sprintf("%s.%s", provider.ProviderType, provider.Id)},
-		})
+		}, "name")
 
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
