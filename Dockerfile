@@ -20,6 +20,19 @@ RUN --mount=target=. \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -o /opt/runner/runner ./cmd/runner
 
+FROM builder AS artifact-test-builder
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go test -tags=integration -c -o /opt/runner/artifact-tests ./internal/runner
+
+FROM alpine:3.23.4 AS artifact-integration
+
+RUN apk add --no-cache git
+COPY --from=artifact-test-builder /opt/runner/artifact-tests /opt/runner/artifact-tests
+COPY --from=tofu /tofu /usr/local/bin/tofu
+RUN /opt/runner/artifact-tests -test.run '^TestArtifactExecutionPreservesLegacyHistory$' -test.v
+
 FROM alpine:3.23.4 AS final
 
 LABEL org.opencontainers.image.source="https://github.com/stellwerk-labs/platform-orchestrator-runner"

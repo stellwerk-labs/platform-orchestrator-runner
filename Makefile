@@ -62,3 +62,8 @@ test-kind-gateway-e2e:
 test-unit:
 	go tool gotestsum --format testname -- -coverprofile=cover.out ./internal/...
 	go vet ./...
+
+## Execute legacy artifact carry-forward and history rollback with installed OpenTofu (IAC_TEST_BINARIES=tofu,terraform for both backends)
+.PHONY: test-artifact-integration
+test-artifact-integration:
+	go test -tags=integration ./internal/runner -run '^TestArtifactExecutionPreservesLegacyHistory$$' -count=1 -v

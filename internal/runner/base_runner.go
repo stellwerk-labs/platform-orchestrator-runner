@@ -83,6 +83,9 @@ func (r *baseRunner) init(ctx context.Context, extraFlags ...string) (string, er
 		}
 		return out, errors.Wrap(err, fmt.Sprintf("failed to run `%s init`", r.binaryPath))
 	}
+	if err := verifyArtifactManifest(r.folder); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 

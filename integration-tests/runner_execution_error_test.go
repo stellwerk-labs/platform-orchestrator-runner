@@ -40,7 +40,7 @@ func TestMissingOutputsError(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{Id: moduleId, ResourceType: "k8s-namespace",
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: moduleId, ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
@@ -136,7 +136,7 @@ func TestProviderConfigurationError_AuthIssue(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:              moduleId,
 			ResourceType:    scoreWorkloadResourceType,
 			ModuleSource:    ref.Ref("git::https://github.com/stellwerk-labs/module-definition-library.git//score-workload/aws-lambda"),
@@ -230,7 +230,7 @@ func TestModuleError_MissingVariable(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:           moduleId,
 			ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"),
@@ -329,7 +329,7 @@ func TestModuleError_BadIndex(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:           "inline-k8s-namespace",
 			ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"),
@@ -430,7 +430,7 @@ func TestModuleError_MissingProvider(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:           moduleId,
 			ResourceType: scoreWorkloadResourceType,
 			ModuleSource: ref.Ref("git::https://github.com/stellwerk-labs/module-definition-library.git//score-workload/aws-lambda"),
@@ -518,7 +518,7 @@ func TestModuleError_WrongSourceCode(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:           "inline-k8s-namespace",
 			ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("git::https://github.com/stellwerk-labs/module-definition-library.git//score-workload/aws-lambdas"),
@@ -617,7 +617,7 @@ func TestModuleResourceError(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{
 			Id:           "inline-k8s-namespace",
 			ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"),

@@ -43,7 +43,7 @@ func TestRemoteRunner_Success(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
@@ -256,7 +256,7 @@ func TestRemoteRunner_Failure(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
@@ -333,7 +333,7 @@ func TestRemoteRunner_Failure_job_creation(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
@@ -395,7 +395,7 @@ func TestRemoteRunner_ServiceAccount_NotExisting(t *testing.T) {
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
 	}
 	{
-		res, err := cpClient.CreateModuleWithResponse(t.Context(), orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
+		res, err := createManagedModuleWithResponse(t, cpClient, orgId, platformorchestratorcp.ModuleCreateBody{Id: "dummy-k8s-namespace", ResourceType: "k8s-namespace",
 			ModuleSource: ref.Ref("inline"), ModuleSourceCode: ref.Ref(dummyK8sNamespaceSourceCode), ModuleInputs: map[string]interface{}{"prefix": "${context.project_id}-${context.env_id}", "project": "my-gcp-project"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, res.StatusCode(), string(res.Body))
