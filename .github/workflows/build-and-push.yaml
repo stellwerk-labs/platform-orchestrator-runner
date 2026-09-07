@@ -1,20 +1,229 @@
 name: Build and push image to public ghcr registry
+
 on:
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: "Pre-existing approved vX.Y.Z-rc.N tag (never stable/latest)"
+        required: true
+        type: string
+      candidate_sha:
+        description: "Approved full 40-character commit SHA identified by that tag"
+        required: true
+        type: string
   push:
     tags:
       - "v*.*.*"
 
+permissions:
+  contents: read
+
+env:
+  DOCKER_BUILDKIT: "1"
+
 jobs:
-  push-to-ghcr-registry:
+  candidate-preflight:
+    if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout approved candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require immutable candidate and pre-provisioned reviewer approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/environments/public-release-candidate" > "$RUNNER_TEMP/candidate-environment.json"
+          python3 scripts/candidate-release.py "$CANDIDATE_TAG" "$CANDIDATE_SHA" \
+            --environment-json "$RUNNER_TEMP/candidate-environment.json"
+
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_sha || github.ref }}
+
+      - name: Test candidate publication contract
+        run: python3 scripts/candidate-release_test.py
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Generate code
+        run: make generate
+
+      - name: Tidy go mod
+        run: go mod tidy
+
+      - name: Check git diff is clean
+        run: git diff --exit-code
+
+      - name: Run Go Tests
+        run: GOFLAGS=-coverprofile=cover.out make test-unit
+
+      - name: Execute legacy artifact upgrade and rollback with the shipped OpenTofu
+        run: docker build --target artifact-integration .
+
+      - name: Collect unit test coverage
+        run: |
+          if [ -f cover.out ]; then
+            go tool cover -html=cover.out -o coverage.html
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-coverage
+          path: |
+            cover.out
+            coverage.html
+
+  test-integration:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    env:
+      CP_IMAGE: ${{ vars.CORE_CP_INTEGRATION_IMAGE }}
+      IAM_IMAGE: ${{ vars.CORE_IAM_INTEGRATION_IMAGE }}
+      DP_IMAGE: ${{ vars.CORE_DP_INTEGRATION_IMAGE }}
+    steps:
+      - name: Require the compatible Core candidate image set
+        shell: bash
+        run: |
+          for image_variable in CP_IMAGE IAM_IMAGE DP_IMAGE; do
+            if [[ ! "${!image_variable}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Set CORE_${image_variable%_IMAGE}_INTEGRATION_IMAGE to the compatible image digest recorded in the OSS release manifest. Pre-module-management fallback images are not valid."
+              exit 1
+            fi
+          done
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_sha || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+
+      - name: Go cache for Docker
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            go-build-cache
+            go-mod-cache
+          key: ${{ runner.os }}-docker-go-cache-${{ hashFiles('**/go.sum') }}
+
+      - name: inject go-mod-cache into docker
+        uses: reproducible-containers/buildkit-cache-dance@v3.4.0
+        with:
+          cache-map: |
+            {
+              "go-build-cache": "/root/.cache/go-build",
+              "go-mod-cache": "/go/pkg/mod"
+            }
+          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
+
+      - name: Setup Score Compose
+        uses: score-spec/setup-score@v3.2.4
+        with:
+          file: score-compose
+          version: latest
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: score-compose --version
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: make test-integration
+
+      - name: Show integration test logs
+        if: always()
+        run: |
+          set +e
+          make -q test-integration-logs
+          if test $? -le 1; then
+            make test-integration-logs
+          else
+            docker compose logs
+          fi
+
+      - if: always()
+        run: make clean
+
+  helm-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_sha || github.ref }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: "3.12.0"
+
+      - name: Build chart dependencies
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm dependency build ./charts/platform-orchestrator-kubernetes-agent-runner
+
+      - name: Test chart metadata parser
+        run: bash scripts/chart-metadata_test.sh
+
+      - name: Helm Lint
+        run: helm lint ./charts/platform-orchestrator-kubernetes-agent-runner
+
+      - name: Helm Template
+        run: helm template platform-orchestrator-kubernetes-agent-runner ./charts/platform-orchestrator-kubernetes-agent-runner
+
+      - name: Test runner gateway modes
+        run: bash scripts/chart-gateway-modes_test.sh
+
+  stable-release:
+    if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc.')
+    needs:
+      - test-unit
+      - test-integration
+      - helm-validate
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
-    env:
-      DOCKER_BUILDKIT: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
@@ -46,3 +255,84 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --notes-file "$notes"
+
+  candidate-release:
+    if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'workflow_dispatch'
+    needs:
+      - candidate-preflight
+      - test-unit
+      - test-integration
+      - helm-validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: public-release-candidate
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout tested immutable candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate candidate and refuse existing publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/environments/public-release-candidate" > "$RUNNER_TEMP/candidate-environment.json"
+          python3 scripts/candidate-release.py "$CANDIDATE_TAG" "$CANDIDATE_SHA" \
+            --environment-json "$RUNNER_TEMP/candidate-environment.json" \
+            --check-image-absent "$GITHUB_REPOSITORY"
+
+      - name: Reserve candidate release without creating a tag or changing latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$CANDIDATE_TAG" --verify-tag --prerelease --latest=false \
+            --title "$CANDIDATE_TAG" --notes-file "docs/releases/$CANDIDATE_TAG.md"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push exact candidate image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          target: final
+          tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ inputs.candidate_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.version=${{ inputs.candidate_tag }}
+            org.opencontainers.image.revision=${{ inputs.candidate_sha }}
+
+      - name: Verify candidate image by immutable digest
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker buildx imagetools inspect "ghcr.io/stellwerk-labs/platform-orchestrator-runner@$IMAGE_DIGEST"
