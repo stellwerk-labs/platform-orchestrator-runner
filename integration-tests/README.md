@@ -43,16 +43,22 @@ custom provider installation implementation is included. Missing provider
 versions are not silently taken from this mirror. Refresh its explicit fixture
 versions when the corresponding integration fixture constraints change.
 
-## Legacy artifact contract
+## Module artifact availability and legacy history
 
 Run `IAC_TEST_BINARIES=tofu,terraform make test-artifact-integration` from the
 repository root, or `docker build --target artifact-integration .` to exercise
 the OpenTofu binary shipped by the standard Runner image.
 
 The test applies a real local Git module through pre-management deployment,
-migrated v0 carry-forward, first managed version, and exact history rollback.
-Only authoritative `migration_generation: v0` permits a missing historical
-external-artifact claim. Managed or unidentified versions still require their
-claim; all external sources must actually have been downloaded. Artifact
-availability checks do not claim trusted digest verification, which is deferred
-in this Core iteration.
+migrated v0 carry-forward, first managed version, managed deployment without a
+digest, and exact history rollback. External-artifact digest claims are optional
+for managed versions as well. Every external source must actually have been
+downloaded; a supplied non-empty claim must use canonical `sha256:<64 lowercase
+hexadecimal characters>`. Inline source cannot carry an external digest.
+
+Core publication rejects explicitly empty or malformed claims. Current bundles
+omit absent claims. The Runner also reads retained version-1 bundles that encoded
+an absent claim as an empty string, including old inline and v0 deployments.
+That compatibility does not manufacture or verify a claim. Authoritative v0
+history cannot acquire invented SemVer or digest metadata. Trusted verification
+of downloaded artifact contents remains deferred in this Core iteration.

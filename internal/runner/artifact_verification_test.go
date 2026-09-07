@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -60,15 +61,18 @@ func TestVerifyArtifactManifestRejectsDigestForInlineSource(t *testing.T) {
 	require.Contains(t, verificationError.Reason, "inline source must not declare")
 }
 
-func TestVerifyArtifactManifestRejectsExternalSourceWithoutDigest(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, artifactManifestName), []byte(`{"version":1,"artifacts":[{"module_id":"database","version":"2.4.0","source":"registry.example/database@2.4.0","artifact_digest":""}]}`), 0o644))
-
-	err := verifyArtifactManifest(root)
-	var verificationError *ArtifactValidationError
-	require.ErrorAs(t, err, &verificationError)
-	require.Equal(t, "ARTIFACT_MANIFEST_INVALID", verificationError.Code())
-	require.Contains(t, verificationError.Reason, "external source must declare")
+func TestVerifyArtifactManifestRejectsMalformedDeclaredDigest(t *testing.T) {
+	for _, digest := range []string{"sha256:abc", "sha256:" + strings.Repeat("A", 64), "sha512:" + strings.Repeat("0", 64), " sha256:" + strings.Repeat("0", 64)} {
+		t.Run(digest, func(t *testing.T) {
+			root := t.TempDir()
+			encoded, err := json.Marshal(artifactManifest{Version: 1, Artifacts: []artifactRequirement{{ModuleID: "database", Version: "2.4.0", Source: "registry.example/database@2.4.0", ArtifactDigest: digest}}})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(root, artifactManifestName), encoded, 0o644))
+			var verificationError *ArtifactValidationError
+			require.ErrorAs(t, verifyArtifactManifest(root), &verificationError)
+			require.Equal(t, "ARTIFACT_MANIFEST_INVALID", verificationError.Code())
+		})
+	}
 }
 
 func TestVerifyArtifactManifestRejectsMissingArtifact(t *testing.T) {
@@ -103,10 +107,12 @@ func TestVerifyArtifactManifestLegacyMigrationContract(t *testing.T) {
 		{name: "v0 missing artifact", generation: "v0", code: "ARTIFACT_UNAVAILABLE"},
 		{name: "v0 cannot claim SemVer", generation: "v0", semver: "1.0.0", downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
 		{name: "v0 cannot claim digest", generation: "v0", digest: digest, downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
-		{name: "v1 needs digest", generation: "v1", semver: "1.0.0", downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
-		{name: "managed needs digest", generation: "managed", semver: "2.0.0", downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
-		{name: "absent generation is not legacy", downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
-		{name: "unknown generation is not legacy", generation: "v0-compatible", downloaded: true, code: "ARTIFACT_MANIFEST_INVALID"},
+		{name: "v1 without optional digest", generation: "v1", semver: "1.0.0", downloaded: true},
+		{name: "managed without optional digest", generation: "managed", semver: "2.0.0", downloaded: true},
+		{name: "managed missing artifact without digest", generation: "managed", semver: "2.0.0", code: "ARTIFACT_UNAVAILABLE"},
+		{name: "managed missing artifact with digest", generation: "managed", semver: "2.0.0", digest: digest, code: "ARTIFACT_UNAVAILABLE"},
+		{name: "absent generation does not require digest", downloaded: true},
+		{name: "unknown generation does not require digest", generation: "v0-compatible", downloaded: true},
 		{name: "v1 declared claim remains unverified", generation: "v1", semver: "1.0.0", digest: digest, downloaded: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -131,6 +137,14 @@ func TestVerifyArtifactManifestLegacyMigrationContract(t *testing.T) {
 			require.Equal(t, test.code, validationError.Code())
 		})
 	}
+}
+
+func TestVerifyArtifactManifestRetainsEmptyClaimReadCompatibility(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".terraform/modules/retained"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".terraform/modules/modules.json"), []byte(`{"Modules":[{"Key":"database","Source":"git::https://example.com/retained","Dir":".terraform/modules/retained"}]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, artifactManifestName), []byte(`{"version":1,"artifacts":[{"module_id":"database","version":"2.4.0","migration_generation":"managed","semantic_version":"2.4.0","source":"git::https://example.com/retained","artifact_digest":""}]}`), 0o644))
+	require.NoError(t, verifyArtifactManifest(root))
 }
 
 func TestVerifyArtifactManifestRejectsMissingDownloadedDirectory(t *testing.T) {

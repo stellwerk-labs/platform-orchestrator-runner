@@ -59,7 +59,7 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte(configuration), 0o600))
 				if includeManifest {
 					requirement := artifactRequirement{ModuleID: "database", Version: "opaque-" + revision, Source: source, MigrationGeneration: generation, SemanticVersion: semver}
-					if generation != "v0" {
+					if generation == "v1" {
 						requirement.ArtifactDigest = "sha256:" + strings.Repeat("0", 64)
 					}
 					encoded, err := json.Marshal(artifactManifest{Version: 1, Artifacts: []artifactRequirement{requirement}})
@@ -82,8 +82,29 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 			t.Run("pre-management bundle", func(t *testing.T) { deploy(t, legacyRevision, "", "", "legacy", false) })
 			t.Run("migrated v0 carry-forward", func(t *testing.T) { deploy(t, legacyRevision, "v0", "", "legacy", true) })
 			t.Run("first managed v1", func(t *testing.T) { deploy(t, managedRevision, "v1", "1.0.0", "managed", true) })
+			t.Run("managed external artifact without digest", func(t *testing.T) { deploy(t, managedRevision, "managed", "1.1.0", "managed", true) })
 			t.Run("exact history rollback to v0", func(t *testing.T) { deploy(t, legacyRevision, "v0", "", "legacy", true) })
 			t.Run("mounted external artifact", func(t *testing.T) { deploy(t, "mounted", "v0", "", "managed", true) })
+			for _, invalid := range []struct {
+				name, source, digest, code string
+			}{
+				{"malformed declared digest", artifact, "sha256:invalid", "ARTIFACT_MANIFEST_INVALID"},
+				{"inline external digest", "inline", "sha256:" + strings.Repeat("0", 64), "ARTIFACT_MANIFEST_INVALID"},
+				{"unavailable external artifact without digest", "git::" + artifactURL + "?ref=missing", "", "ARTIFACT_UNAVAILABLE"},
+			} {
+				t.Run(invalid.name, func(t *testing.T) {
+					encoded, err := json.Marshal(artifactManifest{Version: 1, Artifacts: []artifactRequirement{{
+						ModuleID: "database", Version: "1.2.0", SemanticVersion: "1.2.0", MigrationGeneration: "managed",
+						Source: invalid.source, ArtifactDigest: invalid.digest,
+					}}})
+					require.NoError(t, err)
+					require.NoError(t, os.WriteFile(filepath.Join(root, artifactManifestName), encoded, 0o600))
+					_, err = base.init(t.Context())
+					var validationError *ArtifactValidationError
+					require.ErrorAs(t, err, &validationError)
+					require.Equal(t, invalid.code, validationError.Code())
+				})
+			}
 		})
 	}
 }

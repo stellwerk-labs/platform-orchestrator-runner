@@ -6,11 +6,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
 
 const artifactManifestName = ".stellwerk-artifacts.json"
+
+var artifactDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type ArtifactValidationError struct {
 	ModuleID  string
@@ -31,7 +34,7 @@ type artifactRequirement struct {
 	SemanticVersion     string `json:"semantic_version,omitempty"`
 	MigrationGeneration string `json:"migration_generation,omitempty"`
 	Source              string `json:"source"`
-	ArtifactDigest      string `json:"artifact_digest"`
+	ArtifactDigest      string `json:"artifact_digest,omitempty"`
 }
 
 type artifactManifest struct {
@@ -76,8 +79,8 @@ func verifyArtifactManifest(root string) error {
 	}
 
 	for _, requirement := range manifest.Artifacts {
-		// Only the Control Plane's migrated-v0 identity may lack an external
-		// digest. The opaque version ID is not evidence of SemVer or migration.
+		// Preserve the Control Plane's historical identity without fabricating
+		// SemVer or digest metadata. New managed claims are optional as well.
 		legacy := requirement.MigrationGeneration == "v0"
 		if legacy && (requirement.SemanticVersion != "" || requirement.ArtifactDigest != "") {
 			return &ArtifactValidationError{
@@ -96,12 +99,16 @@ func verifyArtifactManifest(root string) error {
 			}
 			continue
 		}
-		if requirement.ArtifactDigest == "" && !legacy {
+		// Version-1 bundles historically encoded an absent claim as "". Keep
+		// those retained bundles readable; publication rejects explicit empty
+		// claims and current producers omit the field. This is format validation,
+		// not the deferred trusted verification of downloaded artifact content.
+		if requirement.ArtifactDigest != "" && !artifactDigestPattern.MatchString(requirement.ArtifactDigest) {
 			return &ArtifactValidationError{
 				ModuleID:  requirement.ModuleID,
 				Version:   requirement.Version,
 				CodeValue: "ARTIFACT_MANIFEST_INVALID",
-				Reason:    "external source must declare an artifact digest",
+				Reason:    "external artifact digest must be sha256 followed by 64 lowercase hexadecimal characters",
 			}
 		}
 		directories := artifactDirectories(root, requirement, downloaded)
