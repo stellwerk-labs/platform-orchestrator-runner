@@ -6,6 +6,7 @@ on:
       - "release/module-management-rc.*"
     tags-ignore:
       - "v*-rc.*"
+      - "v*.*.*"
 
 env:
   DOCKER_BUILDKIT: "1"
