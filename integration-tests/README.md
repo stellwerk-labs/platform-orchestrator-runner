@@ -9,9 +9,9 @@ release manifest before publication. Local Make overrides (`CP_IMAGE`,
 `DP_IMAGE`, `IAM_IMAGE`) accept locally built candidate tags, without a push.
 
 `make test-integration` builds the Runner from the current worktree. Test Module
-fixtures explicitly publish SemVer versions and promote their initial Default;
-the retained generated CP fixture client is adapted at its request boundary,
-not by relaxing server lifecycle validation.
+fixtures explicitly publish SemVer versions and promote their initial Default.
+The retained generated CP fixture client is adapted at its request boundary while
+server lifecycle validation stays strict.
 
 ## Optional isolated provider mirror
 
@@ -56,9 +56,9 @@ for managed versions as well. Every external source must actually have been
 downloaded; a supplied non-empty claim must use canonical `sha256:<64 lowercase
 hexadecimal characters>`. Inline source cannot carry an external digest.
 
-Core publication rejects explicitly empty or malformed claims. Current bundles
+The Orchestrator rejects explicitly empty or malformed claims. Current bundles
 omit absent claims. The Runner also reads retained version-1 bundles that encoded
 an absent claim as an empty string, including old inline and v0 deployments.
 That compatibility does not manufacture or verify a claim. Authoritative v0
 history cannot acquire invented SemVer or digest metadata. Trusted verification
-of downloaded artifact contents remains deferred in this Core iteration.
+of downloaded artifact contents remains deferred in this Orchestrator iteration.

@@ -1,11 +1,11 @@
-# Manual Release Candidates
+# Manual release candidates
 
 The normal stable tag release remains available for non-RC `vX.Y.Z` tags in the
 original `stellwerk-labs/platform-orchestrator-runner` repository. Release
 candidates use a separate manual path, so pushing `vX.Y.Z-rc.N` does not publish
 public artifacts by itself.
 
-## Before Dispatch
+## Before dispatch
 
 - Transfer this workflow/helper/docs change separately through an approved
   workflow-only source change.
@@ -18,9 +18,9 @@ public artifacts by itself.
   reviewers before dispatch.
 - Set `CORE_CP_INTEGRATION_IMAGE`, `CORE_IAM_INTEGRATION_IMAGE` and
   `CORE_DP_INTEGRATION_IMAGE` to the compatible public candidate image digests
-  recorded in the OSS release manifest.
+  recorded in the Orchestrator release manifest.
 
-## Dispatch and Recovery
+## Dispatch and recovery
 
 Dispatch the Build and push workflow with `candidate_tag` and `candidate_sha`.
 Unit, artifact, integration and chart validation gates run against the supplied
