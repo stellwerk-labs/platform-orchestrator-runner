@@ -2,6 +2,10 @@ name: CI
 
 on:
   push:
+    branches-ignore:
+      - "release/module-management-rc.*"
+    tags-ignore:
+      - "v*-rc.*"
 
 env:
   DOCKER_BUILDKIT: "1"

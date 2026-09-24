@@ -85,6 +85,15 @@ class CandidateReleaseTests(unittest.TestCase):
             self.assertIn("- " + gate, stable)
             self.assertIn("inputs.candidate_sha || github.ref", jobs[gate])
 
+    def test_candidate_pushes_do_not_duplicate_manual_release_gates(self):
+        workflows = Path(__file__).parents[1] / ".github/workflows"
+        ci_trigger = (workflows / "ci.yaml").read_text().split("\nenv:", 1)[0]
+        self.assertIn('    branches-ignore:\n      - "release/module-management-rc.*"', ci_trigger)
+        self.assertIn('    tags-ignore:\n      - "v*-rc.*"', ci_trigger)
+        release_trigger = (workflows / "build-and-push.yaml").read_text().split("\npermissions:", 1)[0]
+        self.assertIn("  workflow_dispatch:\n", release_trigger)
+        self.assertIn('    tags:\n      - "v*.*.*"\n      - "!v*-rc.*"', release_trigger)
+
 
 if __name__ == "__main__":
     unittest.main()
