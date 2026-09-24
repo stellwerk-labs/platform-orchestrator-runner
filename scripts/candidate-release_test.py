@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import importlib.util
+import os
 from pathlib import Path
 import re
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("candidate-release.py"))
@@ -27,6 +29,41 @@ class CandidateReleaseTests(unittest.TestCase):
                        (SHA, SHA, "b" * 40), ("A" * 40, SHA, SHA)):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 candidate.validate_identity("v3.1.0-rc.1", *values)
+
+    def test_canonical_stable_and_exact_commit(self):
+        for tag in ("v3.1.0", "v0.7.0", "v12.34.56"):
+            with self.subTest(tag=tag):
+                candidate.validate_stable_identity(tag, SHA, SHA, SHA)
+
+    def test_candidate_tags_and_noncanonical_stable_input_fail(self):
+        for tag in ("v3.1.0-rc.1", "latest", "v03.1.0", "v3.01.0", "v3.1.00",
+                    "v3.1", "v3.1.0+build", "../notes", "v3.1.0\nother", "v3.1.0;echo unsafe"):
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                candidate.validate_stable_identity(tag, SHA, SHA, SHA)
+
+    def test_stable_retargeting_and_mismatched_checkout_fail(self):
+        for values in (("a" * 39, SHA, SHA), (SHA, "b" * 40, SHA),
+                       (SHA, SHA, "b" * 40), ("A" * 40, SHA, SHA)):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                candidate.validate_stable_identity("v3.1.0", *values)
+
+    def test_reviewed_release_notes_are_nonempty_in_checked_out_source(self):
+        previous_directory = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            notes = root / "docs/releases"
+            notes.mkdir(parents=True)
+            (notes / "v3.1.0.md").write_text("Reviewed notes.\n")
+            (notes / "v3.1.1.md").write_text("")
+            (notes / "v3.1.2.md").write_text(" \n\t")
+            try:
+                os.chdir(root)
+                candidate.validate_release_notes("v3.1.0", "stable")
+                for tag in ("v3.1.1", "v3.1.2", "v3.1.3"):
+                    with self.subTest(tag=tag), self.assertRaises(ValueError):
+                        candidate.validate_release_notes(tag, "stable")
+            finally:
+                os.chdir(previous_directory)
 
     def test_preexisting_environment_requires_reviewers(self):
         candidate.validate_environment({
@@ -64,15 +101,20 @@ class CandidateReleaseTests(unittest.TestCase):
                       "Build the checked-out approved SHA, not the workflow event's default Git context")
         for required in ("github.repository == 'stellwerk-labs/platform-orchestrator-runner'",
                          "github.event_name == 'workflow_dispatch'", "environment: public-release-candidate",
-                         "- candidate-preflight", "- test-unit", "- test-integration", "- helm-validate",
+                         "- release-preflight", "- test-unit", "- test-integration", "- helm-validate",
                          "--verify-tag --prerelease --latest=false",
                          "ref: ${{ inputs.candidate_sha }}", "--check-image-absent \"$GITHUB_REPOSITORY\""):
             self.assertIn(required, publication)
         for forbidden in ("git tag ", ":latest", "--force"):
             self.assertNotIn(forbidden, publication)
-        self.assertIn("/environments/public-release-candidate", jobs["candidate-preflight"])
+        self.assertNotIn("--draft", publication)
+        self.assertNotIn("gh release edit", publication)
+        preflight = jobs["release-preflight"]
+        self.assertIn("/environments/public-release-candidate", preflight)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", preflight)
+        self.assertNotIn("--stable", publication)
 
-    def test_stable_tag_publication_excludes_rcs_and_forks(self):
+    def test_stable_tag_publication_is_exact_guarded_and_ci_gated(self):
         text = Path(__file__).parents[1].joinpath(".github/workflows/build-and-push.yaml").read_text()
         jobs = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", text, re.M | re.S))
         stable = jobs["stable-release"]
@@ -81,15 +123,56 @@ class CandidateReleaseTests(unittest.TestCase):
         self.assertIn("github.event_name == 'push'", stable_condition)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", stable_condition)
         self.assertIn("!contains(github.ref_name, '-rc.')", stable_condition)
-        for gate in ("test-unit", "test-integration", "helm-validate"):
+        for gate in ("release-preflight", "test-unit", "test-integration", "helm-validate"):
             self.assertIn("- " + gate, stable)
+        for gate in ("test-unit", "test-integration", "helm-validate"):
             self.assertIn("inputs.candidate_sha || github.ref", jobs[gate])
+            self.assertIn("needs: release-preflight", jobs[gate])
+        for required in ("ref: ${{ github.ref }}", "--stable",
+                         "--check-image-absent \"$GITHUB_REPOSITORY\"",
+                         "STABLE_SHA: ${{ github.sha }}",
+                         "group: release-${{ github.repository }}", "cancel-in-progress: false",
+                         "gh release create \"$STABLE_TAG\" --verify-tag --draft",
+                         "gh release edit \"$STABLE_TAG\" --draft=false",
+                         "--notes-file \"docs/releases/$STABLE_TAG.md\""):
+            self.assertIn(required, stable)
+        self.assertNotIn("environment: public-release-candidate", stable)
+        self.assertNotIn("--prerelease", stable)
 
-    def test_candidate_pushes_do_not_duplicate_manual_release_gates(self):
+        image_step = next(step for step in stable.split("\n      - ")
+                          if "uses: docker/build-push-action@" in step)
+        for required in ("\n          context: .\n", "\n          sbom: true\n",
+                         "\n          provenance: mode=max\n",
+                         "org.opencontainers.image.version=${{ github.ref_name }}",
+                         "org.opencontainers.image.revision=${{ github.sha }}"):
+            self.assertIn(required, image_step)
+        self.assertIn("steps.image.outputs.digest", stable)
+        self.assertIn("docker buildx imagetools inspect", stable)
+        self.assertLess(stable.index("gh release create"), stable.index("docker/build-push-action@"))
+        self.assertLess(stable.index("docker/build-push-action@"), stable.index("docker buildx imagetools inspect"))
+        self.assertLess(stable.index("docker buildx imagetools inspect"), stable.index("gh release edit"))
+
+    def test_preflight_checks_both_release_types_before_expensive_gates(self):
+        text = Path(__file__).parents[1].joinpath(".github/workflows/build-and-push.yaml").read_text()
+        jobs = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", text, re.M | re.S))
+        preflight = jobs["release-preflight"]
+        self.assertIn("ref: ${{ inputs.candidate_sha || github.ref }}", preflight)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", preflight)
+        self.assertIn("if: github.event_name == 'push'", preflight)
+        self.assertIn("STABLE_SHA: ${{ github.sha }}", preflight)
+        self.assertEqual(2, preflight.count("--check-image-absent \"$GITHUB_REPOSITORY\""))
+        self.assertIn("--stable", preflight)
+        for gate in ("test-unit", "test-integration", "helm-validate"):
+            self.assertIn("needs: release-preflight", jobs[gate])
+
+    def test_release_trigger_ownership_avoids_duplicate_gate_runs(self):
         workflows = Path(__file__).parents[1] / ".github/workflows"
         ci_trigger = (workflows / "ci.yaml").read_text().split("\nenv:", 1)[0]
         self.assertIn('    branches-ignore:\n      - "release/module-management-rc.*"', ci_trigger)
         self.assertIn('    tags-ignore:\n      - "v*-rc.*"', ci_trigger)
+        self.assertIn('      - "v*.*.*"', ci_trigger)
+        ordinary_ci = (workflows / "ci.yaml").read_text()
+        self.assertIn("run: python3 scripts/candidate-release_test.py", ordinary_ci)
         release_trigger = (workflows / "build-and-push.yaml").read_text().split("\npermissions:", 1)[0]
         self.assertIn("  workflow_dispatch:\n", release_trigger)
         self.assertIn('    tags:\n      - "v*.*.*"\n      - "!v*-rc.*"', release_trigger)

@@ -23,22 +23,23 @@ env:
   DOCKER_BUILDKIT: "1"
 
 jobs:
-  candidate-preflight:
-    if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'workflow_dispatch'
+  release-preflight:
+    if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc.')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Checkout approved candidate
+      - name: Checkout exact release source
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: ${{ inputs.candidate_sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require immutable candidate and pre-provisioned reviewer approval
+      - name: Require immutable candidate, reviewer approval, and unused destinations
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
@@ -47,9 +48,23 @@ jobs:
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/environments/public-release-candidate" > "$RUNNER_TEMP/candidate-environment.json"
           python3 scripts/candidate-release.py "$CANDIDATE_TAG" "$CANDIDATE_SHA" \
-            --environment-json "$RUNNER_TEMP/candidate-environment.json"
+            --environment-json "$RUNNER_TEMP/candidate-environment.json" \
+            --check-image-absent "$GITHUB_REPOSITORY"
+
+      - name: Require immutable stable release and unused destinations
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ github.ref_name }}
+          STABLE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/candidate-release.py "$STABLE_TAG" "$STABLE_SHA" \
+            --stable \
+            --check-image-absent "$GITHUB_REPOSITORY"
 
   test-unit:
+    needs: release-preflight
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -57,7 +72,7 @@ jobs:
         with:
           ref: ${{ inputs.candidate_sha || github.ref }}
 
-      - name: Test candidate publication contract
+      - name: Test release publication contract
         run: python3 scripts/candidate-release_test.py
 
       - name: Setup Go
@@ -96,6 +111,7 @@ jobs:
             coverage.html
 
   test-integration:
+    needs: release-preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -180,6 +196,7 @@ jobs:
         run: make clean
 
   helm-validate:
+    needs: release-preflight
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -212,19 +229,45 @@ jobs:
   stable-release:
     if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc.')
     needs:
+      - release-preflight
       - test-unit
       - test-integration
       - helm-validate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: write
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout exact stable release source
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.ref }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Revalidate stable release and refuse existing publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ github.ref_name }}
+          STABLE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/candidate-release.py "$STABLE_TAG" "$STABLE_SHA" \
+            --stable \
+            --check-image-absent "$GITHUB_REPOSITORY"
+
+      - name: Reserve draft stable release without creating or moving its tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$STABLE_TAG" --verify-tag --draft \
+            --title "$STABLE_TAG" --notes-file "docs/releases/$STABLE_TAG.md"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
@@ -236,31 +279,43 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and push
+      - name: Build and push exact stable image
+        id: image
         uses: docker/build-push-action@v7
         with:
+          context: .
           push: true
           platforms: linux/amd64,linux/arm64
           target: final
           tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Create GitHub release
+      - name: Verify stable image by immutable digest
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
-          notes="docs/releases/${GITHUB_REF_NAME}.md"
-          test -f "$notes"
-          gh release create "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --notes-file "$notes"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker buildx imagetools inspect "ghcr.io/stellwerk-labs/platform-orchestrator-runner@$IMAGE_DIGEST"
+
+      - name: Publish verified stable GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "$STABLE_TAG" --draft=false
 
   candidate-release:
     if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'workflow_dispatch'
     needs:
-      - candidate-preflight
+      - release-preflight
       - test-unit
       - test-integration
       - helm-validate

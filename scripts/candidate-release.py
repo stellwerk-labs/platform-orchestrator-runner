@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed checks for explicitly approved, immutable release candidates."""
+"""Fail-closed checks for immutable candidate and stable releases."""
 import argparse
 import json
 import os
@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 CANDIDATE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.([1-9][0-9]*)")
+STABLE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 SHA = re.compile(r"[0-9a-f]{40}")
 REPOSITORY = "stellwerk-labs/platform-orchestrator-runner"
 
@@ -24,6 +25,15 @@ def validate_identity(tag, expected_sha, head_sha, tag_sha):
         raise ValueError("candidate tag, checkout and approved SHA must identify the same commit")
 
 
+def validate_stable_identity(tag, expected_sha, head_sha, tag_sha):
+    if not STABLE.fullmatch(tag):
+        raise ValueError("stable tag must be canonical vX.Y.Z")
+    if not SHA.fullmatch(expected_sha):
+        raise ValueError("stable SHA must be exactly 40 lowercase hexadecimal characters")
+    if head_sha != expected_sha or tag_sha != expected_sha:
+        raise ValueError("stable tag, checkout and source SHA must identify the same commit")
+
+
 def validate_environment(environment):
     if environment.get("name") != "public-release-candidate":
         raise ValueError("the pre-provisioned public-release-candidate environment is required")
@@ -34,7 +44,7 @@ def validate_environment(environment):
 
 def validate_absence_status(status):
     if status != 404:
-        raise ValueError(f"candidate image absence is not proven (HTTP {status}); refuse publication")
+        raise ValueError(f"image absence is not proven (HTTP {status}); refuse publication")
 
 
 def validate_release_page(tag, releases):
@@ -47,6 +57,12 @@ def validate_release_page(tag, releases):
             raise ValueError("unexpected GitHub release record")
         if release["tag_name"] == tag:
             raise ValueError("a draft or published GitHub release already reserves this tag")
+
+
+def validate_release_notes(tag, release_kind):
+    notes = Path("docs/releases", tag + ".md")
+    if not notes.is_file() or not notes.read_text().strip():
+        raise ValueError(f"reviewed {release_kind} notes must be nonempty in docs/releases/<{release_kind}-tag>.md")
 
 
 def assert_release_unreserved(tag):
@@ -90,22 +106,29 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tag")
     parser.add_argument("sha")
-    parser.add_argument("--environment-json", type=Path, required=True)
+    parser.add_argument("--stable", action="store_true")
+    parser.add_argument("--environment-json", type=Path)
     parser.add_argument("--check-image-absent", metavar="OWNER/REPOSITORY")
     args = parser.parse_args()
-    validate_identity(args.tag, args.sha, args.sha, args.sha)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     tag = subprocess.check_output(["git", "rev-parse", "--verify", f"refs/tags/{args.tag}^{{commit}}"], text=True).strip()
-    validate_identity(args.tag, args.sha, head, tag)
-    validate_environment(json.loads(args.environment_json.read_text()))
-    if not Path("docs/releases", args.tag + ".md").is_file():
-        raise ValueError("reviewed candidate notes must exist in docs/releases/<candidate-tag>.md")
+    if args.stable:
+        validate_stable_identity(args.tag, args.sha, head, tag)
+        validate_release_notes(args.tag, "stable")
+        release_kind = "stable release"
+    else:
+        validate_identity(args.tag, args.sha, head, tag)
+        if not args.environment_json:
+            raise ValueError("candidate validation requires the public-release-candidate environment")
+        validate_environment(json.loads(args.environment_json.read_text()))
+        validate_release_notes(args.tag, "candidate")
+        release_kind = "release candidate"
     if args.check_image_absent:
         if args.check_image_absent != REPOSITORY:
             raise ValueError("only the reviewed public Runner image destination is supported")
         assert_release_unreserved(args.tag)
         assert_image_absent(args.check_image_absent, args.tag)
-    print(f"Verified release candidate {args.tag} at {args.sha}; no publication performed.")
+    print(f"Verified {release_kind} {args.tag} at {args.sha}; no publication performed.")
 
 
 if __name__ == "__main__":
