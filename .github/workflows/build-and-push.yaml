@@ -260,13 +260,13 @@ jobs:
             --stable \
             --check-image-absent "$GITHUB_REPOSITORY"
 
-      - name: Reserve stable release without creating or moving its tag
+      - name: Reserve draft stable release without creating or moving its tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STABLE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          gh release create "$STABLE_TAG" --verify-tag \
+          gh release create "$STABLE_TAG" --verify-tag --draft \
             --title "$STABLE_TAG" --notes-file "docs/releases/$STABLE_TAG.md"
 
       - name: Login to GitHub Container Registry
@@ -303,6 +303,14 @@ jobs:
           set -euo pipefail
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           docker buildx imagetools inspect "ghcr.io/stellwerk-labs/platform-orchestrator-runner@$IMAGE_DIGEST"
+
+      - name: Publish verified stable GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "$STABLE_TAG" --draft=false
 
   candidate-release:
     if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'workflow_dispatch'

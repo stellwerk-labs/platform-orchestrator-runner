@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import importlib.util
+import os
 from pathlib import Path
 import re
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("candidate-release.py"))
@@ -45,11 +47,23 @@ class CandidateReleaseTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 candidate.validate_stable_identity("v3.1.0", *values)
 
-    def test_reviewed_release_notes_exist_in_checked_out_source(self):
-        candidate.validate_release_notes("v3.1.0-rc.2", "candidate")
-        candidate.validate_release_notes("v3.1.0", "stable")
-        with self.assertRaises(ValueError):
-            candidate.validate_release_notes("v999.0.0", "stable")
+    def test_reviewed_release_notes_are_nonempty_in_checked_out_source(self):
+        previous_directory = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            notes = root / "docs/releases"
+            notes.mkdir(parents=True)
+            (notes / "v3.1.0.md").write_text("Reviewed notes.\n")
+            (notes / "v3.1.1.md").write_text("")
+            (notes / "v3.1.2.md").write_text(" \n\t")
+            try:
+                os.chdir(root)
+                candidate.validate_release_notes("v3.1.0", "stable")
+                for tag in ("v3.1.1", "v3.1.2", "v3.1.3"):
+                    with self.subTest(tag=tag), self.assertRaises(ValueError):
+                        candidate.validate_release_notes(tag, "stable")
+            finally:
+                os.chdir(previous_directory)
 
     def test_preexisting_environment_requires_reviewers(self):
         candidate.validate_environment({
@@ -93,6 +107,8 @@ class CandidateReleaseTests(unittest.TestCase):
             self.assertIn(required, publication)
         for forbidden in ("git tag ", ":latest", "--force"):
             self.assertNotIn(forbidden, publication)
+        self.assertNotIn("--draft", publication)
+        self.assertNotIn("gh release edit", publication)
         preflight = jobs["release-preflight"]
         self.assertIn("/environments/public-release-candidate", preflight)
         self.assertIn("if: github.event_name == 'workflow_dispatch'", preflight)
@@ -116,7 +132,8 @@ class CandidateReleaseTests(unittest.TestCase):
                          "--check-image-absent \"$GITHUB_REPOSITORY\"",
                          "STABLE_SHA: ${{ github.sha }}",
                          "group: release-${{ github.repository }}", "cancel-in-progress: false",
-                         "gh release create \"$STABLE_TAG\" --verify-tag",
+                         "gh release create \"$STABLE_TAG\" --verify-tag --draft",
+                         "gh release edit \"$STABLE_TAG\" --draft=false",
                          "--notes-file \"docs/releases/$STABLE_TAG.md\""):
             self.assertIn(required, stable)
         self.assertNotIn("environment: public-release-candidate", stable)
@@ -131,6 +148,9 @@ class CandidateReleaseTests(unittest.TestCase):
             self.assertIn(required, image_step)
         self.assertIn("steps.image.outputs.digest", stable)
         self.assertIn("docker buildx imagetools inspect", stable)
+        self.assertLess(stable.index("gh release create"), stable.index("docker/build-push-action@"))
+        self.assertLess(stable.index("docker/build-push-action@"), stable.index("docker buildx imagetools inspect"))
+        self.assertLess(stable.index("docker buildx imagetools inspect"), stable.index("gh release edit"))
 
     def test_preflight_checks_both_release_types_before_expensive_gates(self):
         text = Path(__file__).parents[1].joinpath(".github/workflows/build-and-push.yaml").read_text()
@@ -151,6 +171,8 @@ class CandidateReleaseTests(unittest.TestCase):
         self.assertIn('    branches-ignore:\n      - "release/module-management-rc.*"', ci_trigger)
         self.assertIn('    tags-ignore:\n      - "v*-rc.*"', ci_trigger)
         self.assertIn('      - "v*.*.*"', ci_trigger)
+        ordinary_ci = (workflows / "ci.yaml").read_text()
+        self.assertIn("run: python3 scripts/candidate-release_test.py", ordinary_ci)
         release_trigger = (workflows / "build-and-push.yaml").read_text().split("\npermissions:", 1)[0]
         self.assertIn("  workflow_dispatch:\n", release_trigger)
         self.assertIn('    tags:\n      - "v*.*.*"\n      - "!v*-rc.*"', release_trigger)

@@ -60,8 +60,9 @@ def validate_release_page(tag, releases):
 
 
 def validate_release_notes(tag, release_kind):
-    if not Path("docs/releases", tag + ".md").is_file():
-        raise ValueError(f"reviewed {release_kind} notes must exist in docs/releases/<{release_kind}-tag>.md")
+    notes = Path("docs/releases", tag + ".md")
+    if not notes.is_file() or not notes.read_text().strip():
+        raise ValueError(f"reviewed {release_kind} notes must be nonempty in docs/releases/<{release_kind}-tag>.md")
 
 
 def assert_release_unreserved(tag):
