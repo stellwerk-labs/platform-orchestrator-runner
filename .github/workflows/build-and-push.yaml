@@ -148,7 +148,7 @@ jobs:
           skip-extraction: ${{ steps.cache.outputs.cache-hit }}
 
       - name: Setup Score Compose
-        uses: score-spec/setup-score@v3.2.4
+        uses: score-spec/setup-score@v3.2.5
         with:
           file: score-compose
           version: latest
