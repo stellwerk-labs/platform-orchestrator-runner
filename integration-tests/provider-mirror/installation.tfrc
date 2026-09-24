@@ -1,0 +1,19 @@
+provider_installation {
+  filesystem_mirror {
+    path = "/opt/runner/test-providers"
+    include = [
+      "registry.opentofu.org/hashicorp/random",
+      "registry.opentofu.org/hashicorp/kubernetes",
+      "registry.opentofu.org/hashicorp/aws",
+      "registry.opentofu.org/astromechza/faulty",
+    ]
+  }
+  direct {
+    exclude = [
+      "registry.opentofu.org/hashicorp/random",
+      "registry.opentofu.org/hashicorp/kubernetes",
+      "registry.opentofu.org/hashicorp/aws",
+      "registry.opentofu.org/astromechza/faulty",
+    ]
+  }
+}

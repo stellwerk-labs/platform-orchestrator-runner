@@ -140,9 +140,9 @@ func writeOutputWithNewline(w io.Writer, content string) {
 }
 
 func getIaCErrorCode(err error) string {
-	var runnerError *runner.RunnerError
-	if errors.As(err, &runnerError) {
-		return runnerError.Code()
+	var coded interface{ Code() string }
+	if errors.As(err, &coded) {
+		return coded.Code()
 	}
 	return "IAC_COMMAND_ERROR"
 }

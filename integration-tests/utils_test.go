@@ -114,10 +114,67 @@ func MustControlPlaneClient(t *testing.T) platformorchestratorcp.ClientWithRespo
 		if strings.HasPrefix(req.URL.Path, "/internal") {
 			return fmt.Errorf("path %s is internal - MustInternalControlPlaneClient client required", req.URL.Path)
 		}
-		return nil
+		return runnerTestImageRequestEditor(req)
 	}), platformorchestratorcp.WithHTTPClient(testHttpClient))
 	require.NoError(t, err)
 	return client
+}
+
+func runnerTestImageRequestEditor(request *http.Request) error {
+	image := os.Getenv("RUNNER_TEST_IMAGE")
+	if image == "" || request.Method != http.MethodPost || !strings.HasSuffix(request.URL.Path, "/runners") {
+		return nil
+	}
+	var body map[string]any
+	raw, err := io.ReadAll(request.Body)
+	if err != nil {
+		return err
+	}
+	request.Body = io.NopCloser(bytes.NewReader(raw))
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return err
+	}
+	configuration, ok := body["runner_configuration"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("Runner fixture has no runner_configuration")
+	}
+	job, ok := configuration["job"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	template, _ := job["pod_template"].(map[string]any)
+	if template == nil {
+		template = map[string]any{}
+		job["pod_template"] = template
+	}
+	spec, _ := template["spec"].(map[string]any)
+	if spec == nil {
+		spec = map[string]any{}
+		template["spec"] = spec
+	}
+	containers, _ := spec["containers"].([]any)
+	var main map[string]any
+	for _, container := range containers {
+		if value, ok := container.(map[string]any); ok && value["name"] == "main" {
+			main = value
+			break
+		}
+	}
+	if main == nil {
+		main = map[string]any{"name": "main"}
+		containers = append(containers, main)
+	}
+	if _, configured := main["image"]; !configured {
+		main["image"] = image
+	}
+	spec["containers"] = containers
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	request.Body = io.NopCloser(bytes.NewReader(encoded))
+	request.ContentLength = int64(len(encoded))
+	return nil
 }
 
 func MustInternalControlPlaneClient(t *testing.T) platformorchestratorcp.ClientWithResponsesInterface {
@@ -401,6 +458,12 @@ func MustDeployRemoteRunner(t *testing.T, orgId string, privateKey []byte) {
 	manifestBytes, err := os.ReadFile(templateFilePath)
 	require.NoError(t, err)
 	modifiedManifest := strings.ReplaceAll(string(manifestBytes), "${ORG_ID}", orgId)
+	if image := os.Getenv("RUNNER_TEST_IMAGE"); image != "" {
+		modifiedManifest = strings.ReplaceAll(modifiedManifest, "stellwerk-labs/platform-orchestrator-runner:test", image)
+	}
+	if gateway := os.Getenv("RUNNER_TEST_GATEWAY_URL"); gateway != "" {
+		modifiedManifest = strings.ReplaceAll(modifiedManifest, "http://runner-gateway:8080/runner-gateway", gateway)
+	}
 
 	config, err := clientcmd.BuildConfigFromFlags("", "./runner-cluster/kubeconfig.yaml")
 	require.NoError(t, err)

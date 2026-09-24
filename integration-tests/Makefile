@@ -41,6 +41,7 @@ build: compose.yaml build-platform-orchestrator-runner
 .PHONY: test
 test:
 	docker compose up --no-build -d platform-orchestrator-cp-platform-orchestrator-cp platform-orchestrator-dp-platform-orchestrator-dp --wait
+	timeout 60s sh -c 'until curl --fail --silent --output /dev/null http://127.0.0.1:8081/health && curl --fail --silent --output /dev/null http://127.0.0.1:8082/health; do sleep 1; done'
 	docker network connect integration-tests_default runner-control-plane || true
 	SERVER_URL="http://$(shell score-compose resources get-outputs dns.default\#api-dns | jq -r .host):8080" INTERNAL_CP_URL=http://localhost:8081 DB_CONNECTION_STRING="$(shell score-compose resources get-outputs 'postgres.default#platform-orchestrator-dp.postgres' -f 'host=localhost port=5432 dbname={{ .name }} user={{ .username }} password={{ .password }} connect_timeout=5 sslmode=disable')" RUNNER_TOKEN_SALT="vnXd0Ses8L1X0TGGcp+mf/V8dQs+L4/fWvijORwb7lI=" go tool gotestsum --format testname ./ -test.timeout 10m -test.parallel=2 -test.v $(TESTARGS)
 
