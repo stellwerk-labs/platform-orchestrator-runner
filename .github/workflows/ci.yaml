@@ -21,6 +21,9 @@ jobs:
       - name: Test release publication contract
         run: python3 scripts/candidate-release_test.py
 
+      - name: Verify Docker excludes private shell inputs and build outputs
+        run: python3 scripts/release_build_context_test.py
+
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
@@ -40,6 +43,9 @@ jobs:
       - name: Check git diff is clean
         run: |
           git diff --exit-code
+
+      - name: Check known Go vulnerabilities
+        run: sh scripts/check-go-security.sh
 
       - name: Run Go Tests
         run: |

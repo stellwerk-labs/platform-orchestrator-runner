@@ -150,3 +150,46 @@ func TestGetRemoteModeConfiguration(t *testing.T) {
 	require.Equal(t, "https://gateway.example.com/runner-gateway", conf.Gateway.URL)
 
 }
+
+func TestGetStandardModeConfiguration_Observation(t *testing.T) {
+	t.Setenv("ORG_ID", "test-org")
+	setStandardGatewayEnvironment(t)
+	t.Setenv("DEPLOYMENT_ID", deploymentId.String())
+	t.Setenv("MODE", "plan_only")
+	t.Setenv("OBSERVATION_PROTOCOL", ObservationProtocolV1)
+	conf, err := GetStandardModeConfiguration()
+	require.NoError(t, err)
+	require.Equal(t, PlanOnly, conf.Mode)
+	require.True(t, conf.IsObservation())
+}
+
+func TestGetStandardModeConfiguration_ObservationProtocolCombinations(t *testing.T) {
+	for _, test := range []struct {
+		name, mode, protocol string
+		valid, observation   bool
+	}{
+		{"ordinary plan", "plan_only", "", true, false},
+		{"observation", "plan_only", ObservationProtocolV1, true, true},
+		{"unknown protocol", "plan_only", "SECRET_UNKNOWN_PROTOCOL", false, false},
+		{"marker on deploy", "deploy", ObservationProtocolV1, false, false},
+		{"marker on destroy", "destroy", ObservationProtocolV1, false, false},
+		{"unsupported wire mode", "observation", ObservationProtocolV1, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("ORG_ID", "test-org")
+			setStandardGatewayEnvironment(t)
+			t.Setenv("DEPLOYMENT_ID", deploymentId.String())
+			t.Setenv("MODE", test.mode)
+			t.Setenv("OBSERVATION_PROTOCOL", test.protocol)
+			conf, err := GetStandardModeConfiguration()
+			if !test.valid {
+				require.Error(t, err)
+				require.Nil(t, conf)
+				require.NotContains(t, err.Error(), "SECRET_UNKNOWN_PROTOCOL")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.observation, conf.IsObservation())
+		})
+	}
+}

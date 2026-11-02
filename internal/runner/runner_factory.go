@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 
 	"filippo.io/age"
 
@@ -14,16 +15,26 @@ type RunnerFactory func(ctx context.Context, cfg *config.StandardModeConfigurati
 
 // CreateRunner builds the appropriate RunnerInterface based on cfg.TFBackend.
 func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (RunnerInterface, error) {
+	if err := cfg.ValidateObservationProtocol(); err != nil {
+		return nil, err
+	}
+	switch cfg.Mode {
+	case config.Deploy, config.Destroy, config.PlanOnly:
+	default:
+		return nil, errors.New("unsupported runner mode")
+	}
 	var recipient age.Recipient
 	if cfg.EncryptingKey != "" {
 		recipient, _ = age.ParseX25519Recipient(cfg.EncryptingKey)
 	}
 
 	base := &baseRunner{
-		orgID:        cfg.OrgID,
-		deploymentID: cfg.DeploymentID,
-		folder:       cfg.IaCCodeDir,
-		recipient:    recipient,
+		orgID:           cfg.OrgID,
+		deploymentID:    cfg.DeploymentID,
+		folder:          cfg.IaCCodeDir,
+		recipient:       recipient,
+		tool:            string(cfg.IaCBackend),
+		observationOnly: cfg.IsObservation(),
 	}
 	client, err := gatewayapi.NewClient(gatewayapi.ClientConfig{
 		BaseURL: cfg.Gateway.URL, OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerID,
@@ -40,7 +51,9 @@ func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (R
 	switch cfg.IaCBackend {
 	case config.BackendTerraform:
 		return newTerraformRunner(base), nil
-	default:
+	case config.BackendOpenTofu:
 		return newOpenTofuRunner(base), nil
+	default:
+		return nil, errors.New("unsupported IaC backend")
 	}
 }

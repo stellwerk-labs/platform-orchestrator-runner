@@ -67,3 +67,8 @@ test-unit:
 .PHONY: test-artifact-integration
 test-artifact-integration:
 	go test -tags=integration ./internal/runner -run '^TestArtifactExecutionPreservesLegacyHistory$$' -count=1 -v
+
+## Prove safe full-plan observations with real installed Terraform/OpenTofu and local/HTTP state backends
+.PHONY: test-observation-integration
+test-observation-integration:
+	go test -tags=integration ./internal/runner ./internal/executor -run '^TestObservation' -count=1 -v -timeout=230s
