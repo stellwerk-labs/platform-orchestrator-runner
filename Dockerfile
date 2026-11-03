@@ -23,7 +23,7 @@ RUN set -eu; \
     --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
     --install-path /legacy --symlink-path -
 
-FROM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61 AS builder
 
 WORKDIR /app
 
@@ -32,10 +32,11 @@ ENV CGO_ENABLED=0 GOOS=linux GOWORK=off
 COPY . .
 RUN sh scripts/install-go-licenses.sh /usr/local/bin
 
+ARG TARGETARCH
 RUN --mount=target=. \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o /opt/runner/runner ./cmd/runner
+    GOARCH="$TARGETARCH" go build -o /opt/runner/runner ./cmd/runner
 
 FROM builder AS security
 
@@ -46,14 +47,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh scripts/check-go-security.sh binary /opt/runner/runner \
     && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu \
-    && GOARCH="$(go env GOARCH)" OPENTOFU_NOTICES_DIR=/opt/opentofu-notices \
+    && GOARCH="$TARGETARCH" OPENTOFU_NOTICES_DIR=/opt/opentofu-notices \
        sh scripts/collect-licenses.sh /opt/licenses ./cmd/runner
 
 FROM builder AS artifact-test-builder
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go test -tags=integration -c -o /opt/runner/artifact-tests ./internal/runner
+    GOARCH="$TARGETARCH" go test -tags=integration -c -o /opt/runner/artifact-tests ./internal/runner
 
 FROM alpine:3.23.7@sha256:eaa20f3de212fa5cda0c64dc715b55ce28619928536d0d2a97ec1a922c1edce8 AS artifact-integration
 
