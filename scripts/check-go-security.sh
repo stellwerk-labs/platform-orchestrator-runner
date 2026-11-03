@@ -17,6 +17,8 @@ case "${1:-source}" in
   binary)
     [ "$#" -eq 2 ] && [ -f "$2" ] || exit 2
     case "$2" in /*) binary="$2" ;; *) binary="$PWD/$2" ;; esac
+    # Run the scanner on the build host while inspecting the target executable.
+    unset GOOS GOARCH GOAMD64 GOARM64
     # Keep text mode: the scanner's JSON mode reports findings with exit zero.
     go run "$checker" -mode=binary "$binary"
     ;;

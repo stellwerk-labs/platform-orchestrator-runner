@@ -30,6 +30,14 @@ RUN --mount=target=. \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -o /opt/runner/runner ./cmd/runner
 
+FROM builder AS security
+
+COPY --from=tofu /tofu /opt/runner/tofu
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    sh scripts/check-go-security.sh binary /opt/runner/runner \
+    && sh scripts/check-go-security.sh binary /opt/runner/tofu
+
 FROM builder AS artifact-test-builder
 
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -64,6 +72,6 @@ RUN mkdir /.cache /.config /.local /opt/runner/tofu
 RUN chown ${NOBODY_UID}:${NOBODY_GID} /.cache /.config /.local /opt/runner/tofu
 
 USER ${NOBODY_UID}
-COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=builder /opt/runner/runner /opt/runner/runner
-COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=tofu /tofu /usr/local/bin/tofu
+COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/runner /opt/runner/runner
+COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/tofu /usr/local/bin/tofu
 ENTRYPOINT ["/opt/runner/runner"]

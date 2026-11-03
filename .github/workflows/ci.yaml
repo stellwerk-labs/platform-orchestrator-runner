@@ -51,6 +51,12 @@ jobs:
         run: |
           GOFLAGS=-coverprofile=cover.out make test-unit
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check shipped Runner and OpenTofu executables
+        run: docker buildx build --no-cache-filter security --target security .
+
       - name: Execute legacy artifact upgrade and rollback with the shipped OpenTofu
         run: docker build --target artifact-integration .
 
