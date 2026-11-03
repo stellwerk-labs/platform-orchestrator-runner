@@ -7,13 +7,19 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL \
     -o install-opentofu.sh \
     && echo 'e4e899ae7bd86241fd17ad99e9d32f5b2d20a11b1a40d088acabb6e06dba49c5  install-opentofu.sh' | sha256sum -c - \
     && chmod +x ./install-opentofu.sh
-RUN ./install-opentofu.sh --install-method standalone --opentofu-version 1.13.2 \
+RUN set -eu; \
+    export GNUPGHOME="$(mktemp -d)"; \
+    trap 'status=$?; trap - EXIT; gpgconf --homedir "$GNUPGHOME" --kill all || status=1; rm -rf "$GNUPGHOME" || status=1; exit "$status"' EXIT; \
+    ./install-opentofu.sh --install-method standalone --opentofu-version 1.13.2 \
     --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
     --install-path / --symlink-path -
 
 FROM tofu AS legacy-tofu
 
-RUN ./install-opentofu.sh --install-method standalone --opentofu-version 1.10.0 \
+RUN set -eu; \
+    export GNUPGHOME="$(mktemp -d)"; \
+    trap 'status=$?; trap - EXIT; gpgconf --homedir "$GNUPGHOME" --kill all || status=1; rm -rf "$GNUPGHOME" || status=1; exit "$status"' EXIT; \
+    ./install-opentofu.sh --install-method standalone --opentofu-version 1.10.0 \
     --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
     --install-path /legacy --symlink-path -
 
