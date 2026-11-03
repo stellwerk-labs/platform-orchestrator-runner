@@ -32,11 +32,12 @@ RUN --mount=target=. \
 
 FROM builder AS security
 
+ARG RELEASE_VERSION
 COPY --from=tofu /tofu /opt/runner/tofu
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh scripts/check-go-security.sh binary /opt/runner/runner \
-    && sh scripts/check-go-security.sh binary /opt/runner/tofu
+    && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu
 
 FROM builder AS artifact-test-builder
 

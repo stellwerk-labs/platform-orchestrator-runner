@@ -22,8 +22,26 @@ case "${1:-source}" in
     # Keep text mode: the scanner's JSON mode reports findings with exit zero.
     go run "$checker" -mode=binary "$binary"
     ;;
+  vendor-binary)
+    [ "$#" -eq 3 ] && [ -f "$3" ] || exit 2
+    release="$2"
+    case "$3" in /*) binary="$3" ;; *) binary="$PWD/$3" ;; esac
+    unset GOOS GOARCH GOAMD64 GOARM64
+    reports="$(mktemp -d)"
+    trap 'rm -rf "$reports"' EXIT HUP INT TERM
+    text_status=0
+    go run "$checker" -mode=binary -show=verbose "$binary" >"$reports/text" 2>&1 || text_status=$?
+    cat "$reports/text"
+    # JSON exits zero even when findings exist. Require successful completion,
+    # then independently validate its complete inventory and the text exit.
+    json_status=0
+    go run "$checker" -mode=binary -json "$binary" >"$reports/json" || json_status=$?
+    cat "$reports/json"
+    [ "$json_status" -eq 0 ] || exit "$json_status"
+    go run ./scripts/vendorcheck "$release" "$binary" "$reports/text" "$text_status" "$reports/json"
+    ;;
   *)
-    printf 'usage: check-go-security.sh [source | binary PATH]\n' >&2
+    printf 'usage: check-go-security.sh [source | binary PATH | vendor-binary RELEASE PATH]\n' >&2
     exit 2
     ;;
 esac

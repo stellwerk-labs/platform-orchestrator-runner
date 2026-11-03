@@ -92,7 +92,9 @@ jobs:
         run: git diff --exit-code
 
       - name: Check known Go vulnerabilities
-        run: sh scripts/check-go-security.sh
+        run: |
+          go test ./scripts/vendorcheck
+          sh scripts/check-go-security.sh
 
       - name: Run Go Tests
         run: GOFLAGS=-coverprofile=cover.out make test-unit
@@ -101,7 +103,9 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Check shipped Runner and OpenTofu executables
-        run: docker buildx build --no-cache-filter security --target security .
+        env:
+          RELEASE_VERSION: ${{ inputs.candidate_tag || github.ref_name }}
+        run: docker buildx build --no-cache-filter security --target security --build-arg RELEASE_VERSION="$RELEASE_VERSION" .
 
       - name: Execute legacy artifact upgrade and rollback with the shipped OpenTofu
         run: docker build --target artifact-integration .
@@ -130,6 +134,7 @@ jobs:
       CP_IMAGE: ${{ vars.CORE_CP_INTEGRATION_IMAGE }}
       IAM_IMAGE: ${{ vars.CORE_IAM_INTEGRATION_IMAGE }}
       DP_IMAGE: ${{ vars.CORE_DP_INTEGRATION_IMAGE }}
+      RELEASE_VERSION: ${{ inputs.candidate_tag || github.ref_name }}
     steps:
       - name: Require the compatible Core candidate image set
         shell: bash
@@ -152,6 +157,9 @@ jobs:
           go-version-file: go.mod
           check-latest: true
           cache: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
       - name: Go cache for Docker
         id: cache
@@ -297,6 +305,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           target: final
           no-cache-filters: security
+          build-args: RELEASE_VERSION=${{ github.ref_name }}
           tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -387,6 +396,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           target: final
           no-cache-filters: security
+          build-args: RELEASE_VERSION=${{ inputs.candidate_tag }}
           tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ inputs.candidate_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

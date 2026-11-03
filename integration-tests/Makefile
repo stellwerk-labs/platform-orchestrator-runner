@@ -12,6 +12,7 @@ DP_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-dp:v3.0.0
 IAM_IMAGE ?= ghcr.io/stellwerk-labs/platform-orchestrator-iam:v2.1.0
 SERVICE_PLATFORM ?=
 PULL_FLAGS ?=
+RELEASE_VERSION ?=
 
 compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml score.cp.yaml score.dp.yaml score.iam.yaml
 	score-compose check-version '>=0.16.0'
@@ -30,7 +31,8 @@ compose.yaml: Makefile compose-mixins.yaml score.provisioners.yaml score.cp.yaml
 
 .PHONY: build-platform-orchestrator-runner
 build-platform-orchestrator-runner:
-	docker build -t stellwerk-labs/platform-orchestrator-runner ../.
+	$(if $(strip $(RELEASE_VERSION)),,$(error RELEASE_VERSION is required to build the final Runner image))
+	docker buildx build --load --no-cache-filter security --build-arg RELEASE_VERSION="$(RELEASE_VERSION)" -t stellwerk-labs/platform-orchestrator-runner ../.
 	docker tag stellwerk-labs/platform-orchestrator-runner stellwerk-labs/platform-orchestrator-runner:test
 	
 .PHONY: build

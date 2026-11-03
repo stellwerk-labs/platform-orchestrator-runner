@@ -45,7 +45,9 @@ jobs:
           git diff --exit-code
 
       - name: Check known Go vulnerabilities
-        run: sh scripts/check-go-security.sh
+        run: |
+          go test ./scripts/vendorcheck
+          sh scripts/check-go-security.sh
 
       - name: Run Go Tests
         run: |
@@ -55,7 +57,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Check shipped Runner and OpenTofu executables
-        run: docker buildx build --no-cache-filter security --target security .
+        run: docker buildx build --no-cache-filter security --target security --build-arg RELEASE_VERSION=v3.2.0 .
 
       - name: Execute legacy artifact upgrade and rollback with the shipped OpenTofu
         run: docker build --target artifact-integration .
@@ -83,6 +85,7 @@ jobs:
       CP_IMAGE: ${{ vars.CORE_CP_INTEGRATION_IMAGE }}
       IAM_IMAGE: ${{ vars.CORE_IAM_INTEGRATION_IMAGE }}
       DP_IMAGE: ${{ vars.CORE_DP_INTEGRATION_IMAGE }}
+      RELEASE_VERSION: v3.2.0
     steps:
       - name: Require the compatible Core candidate image set
         shell: bash
@@ -101,6 +104,9 @@ jobs:
           go-version-file: go.mod
           check-latest: true
           cache: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
       - name: Go cache for Docker
         id: cache
