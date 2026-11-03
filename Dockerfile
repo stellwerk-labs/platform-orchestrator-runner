@@ -24,6 +24,7 @@ WORKDIR /app
 ENV CGO_ENABLED=0 GOOS=linux GOWORK=off
 
 COPY . .
+RUN sh scripts/install-go-licenses.sh /usr/local/bin
 
 RUN --mount=target=. \
     --mount=type=cache,target=/go/pkg/mod \
@@ -34,10 +35,13 @@ FROM builder AS security
 
 ARG RELEASE_VERSION
 COPY --from=tofu /tofu /opt/runner/tofu
+COPY --from=tofu /LICENSE /README.md /CHANGELOG.md /opt/opentofu-notices/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh scripts/check-go-security.sh binary /opt/runner/runner \
-    && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu
+    && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu \
+    && GOARCH="$(go env GOARCH)" OPENTOFU_NOTICES_DIR=/opt/opentofu-notices \
+       sh scripts/collect-licenses.sh /opt/licenses ./cmd/runner
 
 FROM builder AS artifact-test-builder
 
@@ -75,4 +79,7 @@ RUN chown ${NOBODY_UID}:${NOBODY_GID} /.cache /.config /.local /opt/runner/tofu
 USER ${NOBODY_UID}
 COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/runner /opt/runner/runner
 COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/tofu /usr/local/bin/tofu
+COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/licenses /licenses
+RUN --mount=type=bind,source=scripts/validate-notices.sh,target=/tmp/validate-notices.sh,readonly \
+    sh /tmp/validate-notices.sh /licenses
 ENTRYPOINT ["/opt/runner/runner"]

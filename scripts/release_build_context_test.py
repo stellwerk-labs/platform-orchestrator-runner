@@ -15,6 +15,9 @@ class BuildContextTest(unittest.TestCase):
             context.mkdir()
             (context / ".dockerignore").write_bytes((root / ".dockerignore").read_bytes())
             public = {"go.mod": "module example.invalid/probe\n", "cmd/main.go": "package main\n"}
+            for name in ("scripts/collect-licenses.sh", "scripts/validate-notices.sh",
+                         "scripts/noticecheck/main.go", "scripts/release-notices/opentofu-source.json"):
+                public[name] = (root / name).read_text()
             private = [".env", ".env.local", ".envrc", ".envrc.local", ".direnv/state", ".git/config", "cover.out"]
             for name, contents in public.items():
                 path = context / name
