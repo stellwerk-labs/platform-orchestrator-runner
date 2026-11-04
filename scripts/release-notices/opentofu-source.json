@@ -1,0 +1,10 @@
+{
+  "version": "1.13.2",
+  "sourceCommit": "765062032c46cacab116b36d714db098b806dede",
+  "sourceURL": "https://github.com/opentofu/opentofu/tree/765062032c46cacab116b36d714db098b806dede",
+  "noticeSHA256": {
+    "LICENSE": "142b957651baf401646dd7f3d855cb7c4f6f0921d645faa27e7cb540bc33cf4c",
+    "README.md": "60c539cfab196b4b39768781ee871f07b34aadcada2f4bef42393810e3dbfb92",
+    "CHANGELOG.md": "4a375ca85fcb62c004271d773fb9cd8cd0c169e6ac330f094bcba533292fa70e"
+  }
+}

@@ -50,7 +50,23 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 			root := t.TempDir()
 			base := &baseRunner{folder: root, binaryPath: binaryPath}
 			artifactURL := (&url.URL{Scheme: "file", Path: artifact}).String()
+			type stateSnapshot struct {
+				TerraformVersion string `json:"terraform_version"`
+				Lineage          string `json:"lineage"`
+				Serial           int64  `json:"serial"`
+			}
+			readState := func(t *testing.T) stateSnapshot {
+				t.Helper()
+				data, err := os.ReadFile(filepath.Join(root, "terraform.tfstate"))
+				require.NoError(t, err)
+				var state stateSnapshot
+				require.NoError(t, json.Unmarshal(data, &state))
+				require.NotEmpty(t, state.Lineage)
+				return state
+			}
+			var previousState stateSnapshot
 			deploy := func(t *testing.T, revision, generation, semver, expected string, includeManifest bool) {
+				t.Helper()
 				source := "git::" + artifactURL + "?ref=" + revision
 				if revision == "mounted" {
 					source = artifact
@@ -78,10 +94,34 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 				value, err := base.OutputMetadata(t.Context(), "value")
 				require.NoError(t, err)
 				require.JSONEq(t, fmt.Sprintf("%q", expected), value)
+				state := readState(t)
+				if previousState.Lineage != "" {
+					require.Equal(t, previousState.Lineage, state.Lineage, "carry-forward and history rollback must retain state lineage")
+					require.GreaterOrEqual(t, state.Serial, previousState.Serial, "history rollback must not rewind IaC state")
+				}
+				previousState = state
 			}
-			t.Run("pre-management bundle", func(t *testing.T) { deploy(t, legacyRevision, "", "", "legacy", false) })
+			legacyBinary := os.Getenv("IAC_LEGACY_BINARY")
+			useLegacyEngine := binary == "tofu" && legacyBinary != ""
+			t.Run("pre-management bundle", func(t *testing.T) {
+				if useLegacyEngine {
+					legacyPath, err := exec.LookPath(legacyBinary)
+					require.NoError(t, err)
+					base.binaryPath = legacyPath
+					defer func() { base.binaryPath = binaryPath }()
+				}
+				deploy(t, legacyRevision, "", "", "legacy", false)
+				if useLegacyEngine {
+					require.Equal(t, "1.10.0", readState(t).TerraformVersion, "the upgrade must start from state written by the previously shipped engine")
+				}
+			})
 			t.Run("migrated v0 carry-forward", func(t *testing.T) { deploy(t, legacyRevision, "v0", "", "legacy", true) })
-			t.Run("first managed v1", func(t *testing.T) { deploy(t, managedRevision, "v1", "1.0.0", "managed", true) })
+			t.Run("first managed v1", func(t *testing.T) {
+				deploy(t, managedRevision, "v1", "1.0.0", "managed", true)
+				if useLegacyEngine {
+					require.Equal(t, "1.13.2", readState(t).TerraformVersion, "the patched engine must write the updated state")
+				}
+			})
 			t.Run("managed external artifact without digest", func(t *testing.T) { deploy(t, managedRevision, "managed", "1.1.0", "managed", true) })
 			t.Run("exact history rollback to v0", func(t *testing.T) { deploy(t, legacyRevision, "v0", "", "legacy", true) })
 			t.Run("mounted external artifact", func(t *testing.T) { deploy(t, "mounted", "v0", "", "managed", true) })

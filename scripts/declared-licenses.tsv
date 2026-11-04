@@ -1,0 +1,4 @@
+# Exact production EUPL module identities: module|SPDX|license SHA256|source Git blob
+github.com/stellwerk-labs/golib/hmessaging|EUPL-1.2|6fc9e709ccbfe0d77fbffa2427a983282be2eb88e47b1cdb49f21a83b4d1e665|4153cd377537ff81e00f8a6453dc278600f4ef2b
+github.com/stellwerk-labs/golib/hnats|EUPL-1.2|6fc9e709ccbfe0d77fbffa2427a983282be2eb88e47b1cdb49f21a83b4d1e665|4153cd377537ff81e00f8a6453dc278600f4ef2b
+github.com/stellwerk-labs/golib/htelemetry|EUPL-1.2|6fc9e709ccbfe0d77fbffa2427a983282be2eb88e47b1cdb49f21a83b4d1e665|4153cd377537ff81e00f8a6453dc278600f4ef2b

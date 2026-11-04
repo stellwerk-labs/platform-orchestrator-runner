@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import unittest
 
@@ -176,6 +177,34 @@ class CandidateReleaseTests(unittest.TestCase):
         release_trigger = (workflows / "build-and-push.yaml").read_text().split("\npermissions:", 1)[0]
         self.assertIn("  workflow_dispatch:\n", release_trigger)
         self.assertIn('    tags:\n      - "v*.*.*"\n      - "!v*-rc.*"', release_trigger)
+
+    def test_integration_final_image_requires_actual_release_context(self):
+        root = Path(__file__).parents[1]
+        for workflow, expected in (("ci.yaml", "v3.2.0"),
+                                   ("build-and-push.yaml", "${{ inputs.candidate_tag || github.ref_name }}")):
+            text = (root / ".github/workflows" / workflow).read_text()
+            jobs = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", text, re.M | re.S))
+            integration = jobs["test-integration"]
+            self.assertIn("RELEASE_VERSION: " + expected, integration)
+            self.assertLess(integration.index("uses: docker/setup-buildx-action@v4"),
+                            integration.index("reproducible-containers/buildkit-cache-dance@"))
+        environment = dict(os.environ)
+        environment.pop("RELEASE_VERSION", None)
+        command = ["make", "--no-print-directory", "-n", "-C", "integration-tests"]
+        for version in ("v3.2.0-rc.1", "v3.2.0"):
+            result = subprocess.run(command + ["build-platform-orchestrator-runner"], cwd=root,
+                                    env=dict(environment, RELEASE_VERSION=version),
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('--load --no-cache-filter security --build-arg RELEASE_VERSION="' + version + '"', result.stdout)
+        missing = subprocess.run(command + ["build-platform-orchestrator-runner"], cwd=root,
+                                 env=environment, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("RELEASE_VERSION is required to build the final Runner image", missing.stderr)
+        self.assertNotIn("docker build", missing.stdout)
+        cleanup = subprocess.run(command + ["clean"], cwd=root, env=environment,
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual(cleanup.returncode, 0, cleanup.stderr)
 
 
 if __name__ == "__main__":

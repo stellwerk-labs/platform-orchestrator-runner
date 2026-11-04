@@ -8,7 +8,11 @@ substitutes. CI requires repository variables `CORE_CP_INTEGRATION_IMAGE`,
 release manifest before publication. Local Make overrides (`CP_IMAGE`,
 `DP_IMAGE`, `IAM_IMAGE`) accept locally built candidate tags, without a push.
 
-`make test-integration` builds the Runner from the current worktree. Test Module
+`RELEASE_VERSION=v3.2.0 make test-integration` builds the Runner from the current
+worktree with this release's explicit vendor-risk disposition. Missing release
+context fails the final-image build target; unrelated targets such as cleanup do
+not require it. Publishers pass their actual candidate input or stable tag,
+without a qualification-version fallback. Test Module
 fixtures explicitly publish SemVer versions and promote their initial Default.
 The retained generated CP fixture client is adapted at its request boundary while
 server lifecycle validation stays strict.
@@ -23,7 +27,8 @@ providers already required by these integration tests. Do not publish this image
 as a production Runner.
 
 ```sh
-docker build -t platform-orchestrator-runner:local .
+docker buildx build --load --no-cache-filter security \
+  --build-arg RELEASE_VERSION=v3.2.0 -t platform-orchestrator-runner:local .
 docker build -f integration-tests/provider-mirror/Dockerfile \
   --build-arg RUNNER_IMAGE=platform-orchestrator-runner:local \
   -t platform-orchestrator-runner:test-cached .

@@ -29,6 +29,19 @@ func ExecuteStandardMode(ctx context.Context, cfg *config.StandardModeConfigurat
 	logger := slog.New(slog.NewJSONHandler(logsWriter, &slog.HandlerOptions{Level: programLevel}))
 	slog.SetDefault(logger.WithGroup("runner").With(slog.String("org_id", cfg.OrgID), slog.String("deploy_id", cfg.DeploymentID), slog.String("mode", string(cfg.Mode))))
 
+	if err := cfg.ValidateObservationProtocol(); err != nil {
+		return platformorchestratorapi.DeploymentResultsUpdateBody{Status: platformorchestratorapi.Failure, Error: &platformorchestratorapi.Error{Error: "RUNNER", Message: err.Error()}}, err
+	}
+	if cfg.IsObservation() {
+		return executeObservation(ctx, cfg, runnerFactory)
+	}
+	switch cfg.Mode {
+	case config.Deploy, config.Destroy, config.PlanOnly:
+	default:
+		err := errors.New("unsupported runner mode")
+		return platformorchestratorapi.DeploymentResultsUpdateBody{Status: platformorchestratorapi.Failure, Error: &platformorchestratorapi.Error{Error: "RUNNER", Message: err.Error()}}, err
+	}
+
 	rn, err := runnerFactory(ctx, cfg)
 	if err != nil {
 		return platformorchestratorapi.DeploymentResultsUpdateBody{Status: platformorchestratorapi.Failure, Error: &platformorchestratorapi.Error{Error: "RUNNER", Message: errors.Wrap(err, "failed to create runner").Error()}}, errors.Wrap(err, "[RUNNER]failed to create runner")

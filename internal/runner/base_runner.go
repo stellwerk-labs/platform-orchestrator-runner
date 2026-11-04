@@ -20,12 +20,14 @@ import (
 // baseRunner holds the fields and shared logic used by all local IaC runners.
 // It is not exported and is embedded by the concrete runner types.
 type baseRunner struct {
-	orgID        string
-	deploymentID string
-	folder       string
-	binaryPath   string
-	recipient    age.Recipient
-	bundleLoader func(context.Context) ([]byte, error)
+	orgID           string
+	deploymentID    string
+	folder          string
+	binaryPath      string
+	tool            string
+	observationOnly bool
+	recipient       age.Recipient
+	bundleLoader    func(context.Context) ([]byte, error)
 }
 
 func (r *baseRunner) planFile() string {
@@ -46,6 +48,9 @@ func (r *baseRunner) CreateIaCFolder(ctx context.Context) error {
 
 // Version returns the version string reported by the configured binary.
 func (r *baseRunner) Version(ctx context.Context) (string, error) {
+	if r.observationOnly {
+		return "", errors.New("observation requires the safe observation executor")
+	}
 	out, err := runCmd(ctx, r.binaryPath, "version")
 	if err != nil {
 		return out, errors.Wrap(err, fmt.Sprintf("failed to run `%s version`", r.binaryPath))
@@ -55,6 +60,9 @@ func (r *baseRunner) Version(ctx context.Context) (string, error) {
 
 // OutputMetadata fetches a single named output as a raw JSON string.
 func (r *baseRunner) OutputMetadata(ctx context.Context, metadata string) (string, error) {
+	if r.observationOnly {
+		return "", errors.New("observation outputs are unavailable")
+	}
 	out, err := runCmd(ctx, r.binaryPath, "-chdir="+r.folder, "output", "-json", "-no-color", metadata)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("output", err); err2 == nil && parsedErr != nil {
@@ -75,6 +83,9 @@ func (r *baseRunner) EncryptString(str string) (string, error) {
 }
 
 func (r *baseRunner) init(ctx context.Context, extraFlags ...string) (string, error) {
+	if r.observationOnly {
+		return "", errors.New("observation requires the safe observation executor")
+	}
 	args := append([]string{"-chdir=" + r.folder, "init", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
 	out, err := runCmd(ctx, r.binaryPath, args...)
 	if err != nil {
@@ -90,6 +101,9 @@ func (r *baseRunner) init(ctx context.Context, extraFlags ...string) (string, er
 }
 
 func (r *baseRunner) plan(ctx context.Context, extraFlags ...string) (string, map[string]interface{}, *IaCChanges, error) {
+	if r.observationOnly {
+		return "", nil, nil, errors.New("observation requires the safe observation executor")
+	}
 	args := append([]string{"-chdir=" + r.folder, "plan", "-no-color", "-json", "-compact-warnings", "-out", r.planFile()}, extraFlags...)
 	out, err := runCmd(ctx, r.binaryPath, args...)
 	if err != nil {
@@ -116,6 +130,9 @@ func (r *baseRunner) plan(ctx context.Context, extraFlags ...string) (string, ma
 }
 
 func (r *baseRunner) apply(ctx context.Context, extraFlags ...string) (string, *IaCChanges, error) {
+	if r.observationOnly {
+		return "", nil, errors.New("observation cannot apply")
+	}
 	args := append([]string{"-chdir=" + r.folder, "apply", "-auto-approve", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
 	args = append(args, r.planFile())
 	out, err := runCmd(ctx, r.binaryPath, args...)
@@ -133,6 +150,9 @@ func (r *baseRunner) apply(ctx context.Context, extraFlags ...string) (string, *
 }
 
 func (r *baseRunner) destroy(ctx context.Context, extraFlags ...string) (string, *IaCChanges, error) {
+	if r.observationOnly {
+		return "", nil, errors.New("observation cannot destroy")
+	}
 	args := append([]string{"-chdir=" + r.folder, "destroy", "-auto-approve", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
 	out, err := runCmd(ctx, r.binaryPath, args...)
 	if err != nil {
@@ -149,6 +169,9 @@ func (r *baseRunner) destroy(ctx context.Context, extraFlags ...string) (string,
 }
 
 func (r *baseRunner) output(ctx context.Context, extraFlags ...string) (map[string]interface{}, error) {
+	if r.observationOnly {
+		return nil, errors.New("observation outputs are unavailable")
+	}
 	args := append([]string{"-chdir=" + r.folder, "output", "-json", "-no-color"}, extraFlags...)
 	out, err := runCmd(ctx, r.binaryPath, args...)
 	if err != nil {

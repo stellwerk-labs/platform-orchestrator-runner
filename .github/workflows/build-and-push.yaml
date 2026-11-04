@@ -91,8 +91,27 @@ jobs:
       - name: Check git diff is clean
         run: git diff --exit-code
 
+      - name: Check known Go vulnerabilities
+        run: |
+          go test ./scripts/vendorcheck
+          sh scripts/check-go-security.sh
+
+      - name: Qualify complete production notices and fail-closed final copy
+        run: |
+          sh scripts/install-go-licenses.sh "$RUNNER_TEMP/notice-tools"
+          export PATH="$RUNNER_TEMP/notice-tools:$PATH"
+          python3 -B scripts/notices_test.py
+
       - name: Run Go Tests
         run: GOFLAGS=-coverprofile=cover.out make test-unit
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check shipped Runner and OpenTofu executables
+        env:
+          RELEASE_VERSION: ${{ inputs.candidate_tag || github.ref_name }}
+        run: docker buildx build --no-cache-filter security --target final --build-arg RELEASE_VERSION="$RELEASE_VERSION" --sbom=true --provenance=mode=max --output "type=oci,dest=$RUNNER_TEMP/runner-final-preflight.tar" .
 
       - name: Execute legacy artifact upgrade and rollback with the shipped OpenTofu
         run: docker build --target artifact-integration .
@@ -121,6 +140,7 @@ jobs:
       CP_IMAGE: ${{ vars.CORE_CP_INTEGRATION_IMAGE }}
       IAM_IMAGE: ${{ vars.CORE_IAM_INTEGRATION_IMAGE }}
       DP_IMAGE: ${{ vars.CORE_DP_INTEGRATION_IMAGE }}
+      RELEASE_VERSION: ${{ inputs.candidate_tag || github.ref_name }}
     steps:
       - name: Require the compatible Core candidate image set
         shell: bash
@@ -143,6 +163,9 @@ jobs:
           go-version-file: go.mod
           check-latest: true
           cache: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
       - name: Go cache for Docker
         id: cache
@@ -207,7 +230,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v5
         with:
-          version: "3.12.0"
+          version: "4.3.0"
 
       - name: Build chart dependencies
         run: |
@@ -287,6 +310,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           target: final
+          no-cache-filters: security
+          build-args: RELEASE_VERSION=${{ github.ref_name }}
           tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -376,6 +401,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           target: final
+          no-cache-filters: security
+          build-args: RELEASE_VERSION=${{ inputs.candidate_tag }}
           tags: ghcr.io/stellwerk-labs/platform-orchestrator-runner:${{ inputs.candidate_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

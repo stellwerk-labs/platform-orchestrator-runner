@@ -21,6 +21,27 @@ const (
 	Deploy   RunnerMode = "deploy"
 )
 
+const ObservationProtocolV1 = "environment-observation/v1"
+
+// IsObservation identifies the backwards-compatible observation wire combination.
+func (c *StandardModeConfiguration) IsObservation() bool {
+	return c.Mode == PlanOnly && c.ObservationProtocol == ObservationProtocolV1
+}
+
+// ValidateObservationProtocol also protects callers that construct configuration directly.
+func (c *StandardModeConfiguration) ValidateObservationProtocol() error {
+	if c.ObservationProtocol == "" {
+		return nil
+	}
+	if c.ObservationProtocol != ObservationProtocolV1 {
+		return errors.New("unsupported observation protocol")
+	}
+	if c.Mode != PlanOnly {
+		return errors.New("observation protocol requires plan_only mode")
+	}
+	return nil
+}
+
 type IaCBackendType string
 
 const (
@@ -29,19 +50,20 @@ const (
 )
 
 type StandardModeConfiguration struct {
-	LogLevel          string         `env:"LOG_LEVEL, default=info"`
-	OrgID             string         `env:"ORG_ID,required"`
-	RunnerID          string         `env:"RUNNER_ID,required"`
-	DeploymentID      string         `env:"DEPLOYMENT_ID,required"`
-	DeploymentEnvUUID string         `env:"DEPLOYMENT_ENV_UUID"`
-	Mode              RunnerMode     `env:"MODE,required"`
-	EncryptingKey     string         `env:"ENCRYPTING_KEY"`
-	MetadataKey       string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
-	IaCCodeDir        string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
-	IaCBackend        IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
-	EncryptingLogsKey string         `env:"ENCRYPTING_LOGS_KEY"`
-	DeploymentToken   string         `env:"TOKEN,required"`
-	Gateway           GatewayClientConfiguration
+	LogLevel            string         `env:"LOG_LEVEL, default=info"`
+	OrgID               string         `env:"ORG_ID,required"`
+	RunnerID            string         `env:"RUNNER_ID,required"`
+	DeploymentID        string         `env:"DEPLOYMENT_ID,required"`
+	DeploymentEnvUUID   string         `env:"DEPLOYMENT_ENV_UUID"`
+	Mode                RunnerMode     `env:"MODE,required"`
+	ObservationProtocol string         `env:"OBSERVATION_PROTOCOL"`
+	EncryptingKey       string         `env:"ENCRYPTING_KEY"`
+	MetadataKey         string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
+	IaCCodeDir          string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
+	IaCBackend          IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
+	EncryptingLogsKey   string         `env:"ENCRYPTING_LOGS_KEY"`
+	DeploymentToken     string         `env:"TOKEN,required"`
+	Gateway             GatewayClientConfiguration
 }
 
 type RemoteModeConfiguration struct {
@@ -123,6 +145,10 @@ func GetStandardModeConfiguration() (*StandardModeConfiguration, error) {
 	}
 
 	if err := validateMode(conf.Mode); err != nil {
+		return nil, err
+	}
+
+	if err := conf.ValidateObservationProtocol(); err != nil {
 		return nil, err
 	}
 

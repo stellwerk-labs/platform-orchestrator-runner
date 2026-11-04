@@ -1,0 +1,143 @@
+=== Symbol Results ===
+
+Vulnerability #1: GO-2026-6866
+    Check all ancestor namespace transitions when rendering raw text in html in
+    golang.org/x/net
+  More info: https://pkg.go.dev/vuln/GO-2026-6866
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.62.0
+    Vulnerable symbols found:
+      #1: html.Render
+
+Vulnerability #2: GO-2026-6860
+    Avoid quadratic complexity when coalescing text nodes in html in
+    golang.org/x/net
+  More info: https://pkg.go.dev/vuln/GO-2026-6860
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.62.0
+    Vulnerable symbols found:
+      #1: html.Parse
+      #2: html.ParseFragment
+      #3: html.ParseFragmentWithOptions
+      #4: html.ParseWithOptions
+
+Vulnerability #3: GO-2026-6617
+    HTTP/2 server crash due to HPACK encoder race in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6617
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Vulnerable symbols found:
+      #1: http2.ClientConn.Close
+      #2: http2.ClientConn.Close
+      #3: http2.ClientConn.Close
+      #4: http2.ClientConn.Close
+      #5: http2.ClientConn.Ping
+      Use '-show traces' to see the other 323 found symbols
+
+Vulnerability #4: GO-2026-6612
+    Double flow control refund on HTTP/2 server streams in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6612
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Vulnerable symbols found:
+      #1: http2.ClientConn.Close
+      #2: http2.ClientConn.Close
+      #3: http2.ClientConn.Close
+      #4: http2.ClientConn.Close
+      #5: http2.ClientConn.Ping
+      Use '-show traces' to see the other 323 found symbols
+
+Vulnerability #5: GO-2026-6611
+    Excessive CPU consumption from repeated initial window changes in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6611
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Vulnerable symbols found:
+      #1: http2.ClientConn.Close
+      #2: http2.ClientConn.Close
+      #3: http2.ClientConn.Close
+      #4: http2.ClientConn.Close
+      #5: http2.ClientConn.Ping
+      Use '-show traces' to see the other 328 found symbols
+
+Vulnerability #6: GO-2026-6610
+    HTTP/2 transport accepts malformed framing-related headers in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6610
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Vulnerable symbols found:
+      #1: http2.Transport.NewClientConn
+      #2: http2.Transport.NewClientConn
+      #3: http2.Transport.NewClientConn
+      #4: http2.Transport.NewClientConn
+      #5: http2.Transport.NewClientConn
+      Use '-show traces' to see the other 35 found symbols
+
+Vulnerability #7: GO-2026-6603
+    HTTP/2 server memory exhaustion due to Trailer headers in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6603
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.57.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Vulnerable symbols found:
+      #1: http2.ClientConn.Close
+      #2: http2.ClientConn.Close
+      #3: http2.ClientConn.Close
+      #4: http2.ClientConn.Close
+      #5: http2.ClientConn.Ping
+      Use '-show traces' to see the other 323 found symbols
+
+Vulnerability #8: GO-2026-6443
+    Server panic via missing authority or Host headers in google.golang.org/grpc
+  More info: https://pkg.go.dev/vuln/GO-2026-6443
+  Module: google.golang.org/grpc
+    Found in: google.golang.org/grpc@v1.83.1
+    Fixed in: google.golang.org/grpc@v1.83.2
+    Vulnerable symbols found:
+      #1: server.RouteAndProcess
+      #2: transport.http2Server.HandleStreams
+
+Vulnerability #9: GO-2026-6180
+    Ignore unrelated, unauthenticated hashes in Lookup in golang.org/x/mod/sumdb
+  More info: https://pkg.go.dev/vuln/GO-2026-6180
+  Module: golang.org/x/mod
+    Found in: golang.org/x/mod@v0.39.0
+    Fixed in: golang.org/x/mod@v0.40.0
+    Vulnerable symbols found:
+      #1: sumdb.Client.Lookup
+
+Vulnerability #10: GO-2026-6179
+    Fix transparency log tile verification bypass in golang.org/x/mod/sumdb/tlog
+  More info: https://pkg.go.dev/vuln/GO-2026-6179
+  Module: golang.org/x/mod
+    Found in: golang.org/x/mod@v0.39.0
+    Fixed in: golang.org/x/mod@v0.40.0
+    Vulnerable symbols found:
+      #1: tlog.tileHashReader.ReadHashes
+
+Vulnerability #11: GO-2026-5932
+    The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design,
+    and has known security issues
+  More info: https://pkg.go.dev/vuln/GO-2026-5932
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.56.0
+    Fixed in: golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2
+    Vulnerable symbols found:
+      #1: armor.golang.org/x/crypto/openpgp/armor/*
+      #2: clearsign.golang.org/x/crypto/openpgp/clearsign/*
+      #3: elgamal.golang.org/x/crypto/openpgp/elgamal/*
+      #4: errors.golang.org/x/crypto/openpgp/errors/*
+      #5: openpgp.golang.org/x/crypto/openpgp/*
+      Use '-show traces' to see the other 2 found symbols
+
+Your code is affected by 11 vulnerabilities from 4 modules.
+This scan found no other vulnerabilities in packages you import or modules you
+require.
+Use '-show verbose' for more details.
+exit status 3
