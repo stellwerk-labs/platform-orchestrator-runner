@@ -70,5 +70,5 @@ jobs:
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           test -f "$notes"
           gh release create "$GITHUB_REF_NAME" "$filename" \
-            --verify-tag \
+            --verify-tag --latest=false \
             --notes-file "$notes"

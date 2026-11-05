@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,19 @@ SHA = "a" * 40
 
 
 class CandidateReleaseTests(unittest.TestCase):
+    def test_chart_release_does_not_replace_runner_latest(self):
+        text = Path(__file__).parents[1].joinpath(".github/workflows/chart-publish.yaml").read_text()
+        step = text.split("      - name: Create GitHub release\n", 1)[1]
+        self.assertIn("if: github.event_name == 'push'", step)
+        lines = step.replace("\\\n", " ").splitlines()
+        commands = [shlex.split(line.strip()) for line in lines if line.strip().startswith("gh release create ")]
+        self.assertEqual(len(commands), 1)
+        command = commands[0]
+        self.assertEqual(command[:5], ["gh", "release", "create", "$GITHUB_REF_NAME", "$filename"])
+        self.assertIn("--verify-tag", command)
+        self.assertEqual([arg for arg in command if arg.startswith("--latest")], ["--latest=false"])
+        self.assertEqual(command[command.index("--notes-file") + 1], "$notes")
+
     def test_canonical_candidate_and_exact_commit(self):
         for tag in ("v3.1.0-rc.1", "v3.1.0-rc.12", "v0.7.0-rc.1"):
             with self.subTest(tag=tag):
