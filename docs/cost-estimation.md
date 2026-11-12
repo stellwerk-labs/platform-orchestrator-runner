@@ -5,6 +5,12 @@ Runner logs one aggregate estimate after successful manual and Drift plan inspec
 Existing per-Runner pod-template environment overrides can set this flag without an API change.
 Failure or unsupported pricing adds a sanitized warning or coverage result and does not change plan, deployment or observation success.
 
+Estimates use `INFO`, or `WARN` when estimation fails, and respect `LOG_LEVEL`.
+Default Drift jobs use `INFO` and emit these entries to the job container's stdout.
+Drift observations have no encrypted logs recipient, so these estimates are available through operator Pod logs or an external log collector, not ordinary CLI/Console deployment-log retrieval.
+Pod logs follow the job's lifetime and are not durable estimate storage; external retention depends on the operator's collector.
+Manual estimates enter stored deployment logs when an encrypted logs recipient is configured.
+
 The initial reviewed pricing subset covers AWS `aws_ebs_volume` GP3 disks with known size, type, IOPS, throughput and region, plus Azure `azurerm_managed_disk` `Premium_LRS`/`Premium_ZRS` disks with known capacity and location.
 AWS regions resolve from a literal provider region, a known root variable, a known resource region or a standard availability zone.
 Conflicting regions, unresolved expressions and sensitive pricing inputs stay unknown.

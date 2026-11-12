@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
@@ -26,13 +28,18 @@ func TestObservationExecutorRealToolsProtectsResultsAndLogs(t *testing.T) {
 	for _, backend := range []config.IaCBackendType{config.BackendOpenTofu, config.BackendTerraform} {
 		t.Run(string(backend), func(t *testing.T) {
 			for _, scenario := range []struct {
-				name     string
-				invalid  bool
-				protocol string
+				name        string
+				invalid     bool
+				protocol    string
+				logLevel    string
+				disabled    bool
+				costEntries int
 			}{
-				{"success", false, config.ObservationProtocolV1},
-				{"diagnostic failure", true, config.ObservationProtocolV1},
-				{"ordinary plan_only", false, ""},
+				{"success", false, config.ObservationProtocolV1, "info", false, 1},
+				{"error level opt-out", false, config.ObservationProtocolV1, "error", false, 0},
+				{"cost disabled", false, config.ObservationProtocolV1, "info", true, 0},
+				{"diagnostic failure", true, config.ObservationProtocolV1, "info", false, 0},
+				{"ordinary plan_only", false, "", "info", false, 1},
 			} {
 				invalid := scenario.invalid
 				t.Run(scenario.name, func(t *testing.T) {
@@ -62,6 +69,7 @@ output "secret" {
 					for key, value := range map[string]string{
 						"ORG_ID": "org", "RUNNER_ID": "runner", "DEPLOYMENT_ID": "69aa008a-a60c-4542-8f83-fdc5bb0ae599",
 						"MODE": "plan_only", "OBSERVATION_PROTOCOL": scenario.protocol, "IAC_BACKEND": string(backend), "IAC_CODE_DIR": dir, "TOKEN": "token", "RUNNER_GATEWAY_URL": server.URL,
+						"LOG_LEVEL": scenario.logLevel, "COST_ESTIMATION_ENABLED": strconv.FormatBool(!scenario.disabled), "ENCRYPTING_LOGS_KEY": "",
 					} {
 						t.Setenv(key, value)
 					}
@@ -77,11 +85,16 @@ output "secret" {
 					os.Stdout = write
 					defer func() { os.Stdout = originalStdout; _ = read.Close() }()
 					var logs bytes.Buffer
-					result, executionErr := ExecuteStandardMode(t.Context(), cfg, runner.CreateRunner, limitedlogsbuffer.NewLimitedLogsBuffer(&logs, 1<<20), new(slog.LevelVar))
+					programLevel := new(slog.LevelVar)
+					require.NoError(t, programLevel.UnmarshalText([]byte(cfg.LogLevel)))
+					result, executionErr := ExecuteStandardMode(t.Context(), cfg, runner.CreateRunner, limitedlogsbuffer.NewLimitedLogsBuffer(&logs, 1<<20), programLevel)
 					os.Stdout = originalStdout
 					require.NoError(t, write.Close())
 					stdout, err := io.ReadAll(read)
 					require.NoError(t, err)
+					require.Empty(t, cfg.EncryptingLogsKey)
+					require.Equal(t, scenario.costEntries, strings.Count(string(stdout), `"cost_estimation"`))
+					require.Equal(t, scenario.costEntries, strings.Count(logs.String(), `"cost_estimation"`))
 					encoded, err := json.Marshal(result)
 					require.NoError(t, err)
 					if cfg.IsObservation() {
