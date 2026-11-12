@@ -15,8 +15,8 @@ go version -m "$(command -v go-licenses)" | grep -F "$go_licenses_module" | grep
 module="$(go list -m -f '{{.Path}}')"
 work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
-# Only this application's own module is covered by its root license.
-# Every external production dependency must have actual notices.
+# Go module collection ignores the application module. Its MIT source-vendored
+# Pogi closure is checked separately below. External dependencies require notices.
 go list -deps -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}|{{with .Replace}}{{if .Version}}remote{{else}}local{{end}}{{end}}{{end}}' "$@" > "$work/modules"
 sort -u "$work/modules" | sed '/^$/d' > "$work/unique"
 ignore="$module"
@@ -65,6 +65,11 @@ done < "$work/unique"
 go-licenses save "$@" --ignore "$ignore" --save_path "$output"
 mkdir -p "$output/application" "$output/go"
 cp "$root/LICENSE" "$output/application/LICENSE"
+# Source-vendored Pogi is MIT, distinct from this application's root licence.
+mkdir "$output/pogi"
+for notice in LICENSE SOURCE.json pogi.spdx.json; do
+  cp "$root/internal/thirdparty/pogi/$notice" "$output/pogi/$notice"
+done
 goroot="$(go env GOROOT)"
 cp "$goroot/LICENSE" "$goroot/PATENTS" "$output/go/"
 cut -d '|' -f 1,2 "$work/unique" > "$output/modules.txt"

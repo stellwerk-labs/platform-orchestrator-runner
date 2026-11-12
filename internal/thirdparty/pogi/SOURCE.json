@@ -1,0 +1,96 @@
+{
+  "name": "pogi",
+  "version": "0.2.0",
+  "sourceCommit": "002937be7308b8fe3f9f5d65698c49d47b65aaf6",
+  "sourceURL": "https://github.com/nrndev/pogi/tree/002937be7308b8fe3f9f5d65698c49d47b65aaf6",
+  "license": "MIT",
+  "modification": "Only terraform import paths in aws.go, azure.go and estimate.go are rewritten.",
+  "currency": "USD",
+  "catalogues": {
+    "aws": {
+      "published": {
+        "aws": "2026-10-20"
+      },
+      "source": {
+        "aws": "AWS Price List bulk files (pricing.us-east-1.amazonaws.com), on-demand rows"
+      }
+    },
+    "azure": {
+      "published": {
+        "azure": "2026-10-20"
+      },
+      "source": {
+        "azure": "Azure Retail Prices API (pay-as-you-go list prices, USD)"
+      }
+    },
+    "gcp": {}
+  },
+  "files": [
+    {
+      "upstream": "LICENSE",
+      "path": "LICENSE",
+      "originalSHA256": "3243ac7affae1bc6a42a7c6806e51a361fa77f91859a03425a48710ae514f34e",
+      "adaptedSHA256": "3243ac7affae1bc6a42a7c6806e51a361fa77f91859a03425a48710ae514f34e"
+    },
+    {
+      "upstream": "internal/terraform/model.go",
+      "path": "terraform/model.go",
+      "originalSHA256": "94b6374d5be5214e416b0e2e60e52cdbb9dc09adb14bd7db4164cf4c489901ff",
+      "adaptedSHA256": "94b6374d5be5214e416b0e2e60e52cdbb9dc09adb14bd7db4164cf4c489901ff"
+    },
+    {
+      "upstream": "internal/cost/aws.go",
+      "path": "cost/aws.go",
+      "originalSHA256": "d769a79d720be8b5fefe0199b1524e84140ebcb4cd87a9713e63b3839aa82e22",
+      "adaptedSHA256": "46d32a55d4642649239dd2b84fd11f1f4027318f7cd9e1ffe0a77fb608d5ad4c"
+    },
+    {
+      "upstream": "internal/cost/azure.go",
+      "path": "cost/azure.go",
+      "originalSHA256": "3e15f33559a97d8980ef6bceda10037e150d885bbf289789aa2de2fa183d949c",
+      "adaptedSHA256": "6091c401545d954102d1b061afd916cc61126393dcf19c7eb4c7c1168c3d0f98"
+    },
+    {
+      "upstream": "internal/cost/gcp.go",
+      "path": "cost/gcp.go",
+      "originalSHA256": "1462f49a55f705fa3ff6d0f4a3d4afdae1ba312e4e02b72d79ab26e75c40f16c",
+      "adaptedSHA256": "1462f49a55f705fa3ff6d0f4a3d4afdae1ba312e4e02b72d79ab26e75c40f16c"
+    },
+    {
+      "upstream": "internal/cost/db.go",
+      "path": "cost/db.go",
+      "originalSHA256": "f5f3b3e1a0f4cb335633fbd361da2ef5a8585fe5c6af711d150ad648eb7f5b91",
+      "adaptedSHA256": "f5f3b3e1a0f4cb335633fbd361da2ef5a8585fe5c6af711d150ad648eb7f5b91"
+    },
+    {
+      "upstream": "internal/cost/estimate.go",
+      "path": "cost/estimate.go",
+      "originalSHA256": "243d12cd8d25e415250591dffbb7cec88355bb07398ce089c5606c19ae8d364c",
+      "adaptedSHA256": "6ddb0cb0239a99216ea3c7a0fa43fbd167c14f5fbb5ad35658f8319227ec6e10"
+    },
+    {
+      "upstream": "internal/cost/sizes.go",
+      "path": "cost/sizes.go",
+      "originalSHA256": "c82b4578409b175b85f5e2cd8fc9cf5eada2f3cf7c0def4c06939031083ba6e8",
+      "adaptedSHA256": "c82b4578409b175b85f5e2cd8fc9cf5eada2f3cf7c0def4c06939031083ba6e8"
+    },
+    {
+      "upstream": "internal/cost/prices/aws.json.gz",
+      "path": "cost/prices/aws.json.gz",
+      "originalSHA256": "bc0f1e936679932a676349e1f88eda7b46dacc9bebe215d067d3a780b61b7731",
+      "adaptedSHA256": "bc0f1e936679932a676349e1f88eda7b46dacc9bebe215d067d3a780b61b7731"
+    },
+    {
+      "upstream": "internal/cost/prices/azure.json.gz",
+      "path": "cost/prices/azure.json.gz",
+      "originalSHA256": "4c03629cdc99a658e2e4014a79073f01c9c058311d5b8a39c7d7f031f855c689",
+      "adaptedSHA256": "4c03629cdc99a658e2e4014a79073f01c9c058311d5b8a39c7d7f031f855c689"
+    },
+    {
+      "upstream": "internal/cost/prices/gcp.json.gz",
+      "path": "cost/prices/gcp.json.gz",
+      "originalSHA256": "694735d2026dd25f1fcedb44649393c5ae6c3644b717e84d9cc9f44750c50e2a",
+      "adaptedSHA256": "694735d2026dd25f1fcedb44649393c5ae6c3644b717e84d9cc9f44750c50e2a"
+    }
+  ]
+}

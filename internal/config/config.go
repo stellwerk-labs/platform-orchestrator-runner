@@ -50,20 +50,21 @@ const (
 )
 
 type StandardModeConfiguration struct {
-	LogLevel            string         `env:"LOG_LEVEL, default=info"`
-	OrgID               string         `env:"ORG_ID,required"`
-	RunnerID            string         `env:"RUNNER_ID,required"`
-	DeploymentID        string         `env:"DEPLOYMENT_ID,required"`
-	DeploymentEnvUUID   string         `env:"DEPLOYMENT_ENV_UUID"`
-	Mode                RunnerMode     `env:"MODE,required"`
-	ObservationProtocol string         `env:"OBSERVATION_PROTOCOL"`
-	EncryptingKey       string         `env:"ENCRYPTING_KEY"`
-	MetadataKey         string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
-	IaCCodeDir          string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
-	IaCBackend          IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
-	EncryptingLogsKey   string         `env:"ENCRYPTING_LOGS_KEY"`
-	DeploymentToken     string         `env:"TOKEN,required"`
-	Gateway             GatewayClientConfiguration
+	CostEstimationEnabled bool           `env:"COST_ESTIMATION_ENABLED,default=true"`
+	LogLevel              string         `env:"LOG_LEVEL, default=info"`
+	OrgID                 string         `env:"ORG_ID,required"`
+	RunnerID              string         `env:"RUNNER_ID,required"`
+	DeploymentID          string         `env:"DEPLOYMENT_ID,required"`
+	DeploymentEnvUUID     string         `env:"DEPLOYMENT_ENV_UUID"`
+	Mode                  RunnerMode     `env:"MODE,required"`
+	ObservationProtocol   string         `env:"OBSERVATION_PROTOCOL"`
+	EncryptingKey         string         `env:"ENCRYPTING_KEY"`
+	MetadataKey           string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
+	IaCCodeDir            string         `env:"IAC_CODE_DIR, default=/opt/runner/tofu"`
+	IaCBackend            IaCBackendType `env:"IAC_BACKEND, default=opentofu"`
+	EncryptingLogsKey     string         `env:"ENCRYPTING_LOGS_KEY"`
+	DeploymentToken       string         `env:"TOKEN,required"`
+	Gateway               GatewayClientConfiguration
 }
 
 type RemoteModeConfiguration struct {

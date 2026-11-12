@@ -1,0 +1,33 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "Runner vendored Pogi pricing core",
+  "documentNamespace": "https://stellwerk.dev/spdx/pogi-002937be7308b8fe3f9f5d65698c49d47b65aaf6",
+  "creationInfo": {
+    "creators": [
+      "Organization: Stellwerk"
+    ],
+    "created": "2026-11-12T00:00:00Z"
+  },
+  "packages": [
+    {
+      "name": "pogi",
+      "SPDXID": "SPDXRef-Pogi",
+      "versionInfo": "0.2.0",
+      "downloadLocation": "https://github.com/nrndev/pogi/tree/002937be7308b8fe3f9f5d65698c49d47b65aaf6",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2026 nrndev",
+      "sourceInfo": "Only terraform import paths in aws.go, azure.go and estimate.go are rewritten. Selected source and embedded 2026-10-20 AWS/Azure USD catalogues, GCP catalogue empty. SOURCE.json records every upstream and adapted checksum."
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Pogi"
+    }
+  ]
+}

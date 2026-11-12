@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"os"
 	"testing"
 	"time"
 
@@ -192,4 +193,20 @@ func TestGetStandardModeConfiguration_ObservationProtocolCombinations(t *testing
 			require.Equal(t, test.observation, conf.IsObservation())
 		})
 	}
+}
+
+func TestCostEstimationDefaultAndOptOut(t *testing.T) {
+	t.Setenv("ORG_ID", "test-org")
+	setStandardGatewayEnvironment(t)
+	t.Setenv("DEPLOYMENT_ID", deploymentId.String())
+	t.Setenv("MODE", "plan_only")
+	t.Setenv("COST_ESTIMATION_ENABLED", "")
+	require.NoError(t, os.Unsetenv("COST_ESTIMATION_ENABLED"))
+	cfg, err := GetStandardModeConfiguration()
+	require.NoError(t, err)
+	require.True(t, cfg.CostEstimationEnabled)
+	t.Setenv("COST_ESTIMATION_ENABLED", "false")
+	cfg, err = GetStandardModeConfiguration()
+	require.NoError(t, err)
+	require.False(t, cfg.CostEstimationEnabled)
 }

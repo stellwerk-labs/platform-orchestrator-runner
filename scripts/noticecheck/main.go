@@ -59,7 +59,7 @@ func command(root, arch string, args ...string) ([]byte, error) {
 	cmd := exec.Command("go", args...)
 	cmd.Dir = root
 	env := os.Environ()
-	for _, item := range []string{"GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=0", "GOWORK=off", "GOENV=off", "GOTOOLCHAIN=go1.26.10", "GOFLAGS=", "GOEXPERIMENT="} {
+	for _, item := range []string{"GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=0", "GOWORK=off", "GOENV=off", "GOTOOLCHAIN=go1.26.11", "GOFLAGS=", "GOEXPERIMENT="} {
 		key := strings.SplitN(item, "=", 2)[0] + "="
 		filtered := env[:0]
 		for _, old := range env {
@@ -112,10 +112,13 @@ func receipt(data []byte) (map[string]string, error) {
 	return result, nil
 }
 func check(bundle, root, arch string) error {
+	if err := checkPogi(bundle, root); err != nil {
+		return err
+	}
 	if arch != "amd64" && arch != "arm64" {
 		return fmt.Errorf("unsupported target")
 	}
-	if runtime.Version() != "go1.26.10" {
+	if runtime.Version() != "go1.26.11" {
 		return fmt.Errorf("unexpected notice verifier compiler")
 	}
 	for target, source := range map[string]string{"application/LICENSE": filepath.Join(root, "LICENSE"), "go/LICENSE": filepath.Join(runtime.GOROOT(), "LICENSE"), "go/PATENTS": filepath.Join(runtime.GOROOT(), "PATENTS"), "opentofu/SOURCE.json": filepath.Join(root, "scripts/release-notices/opentofu-source.json")} {

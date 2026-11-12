@@ -66,6 +66,9 @@ func (r *baseRunner) Observe(ctx context.Context) (result *api.ObservationResult
 	if ctx.Err() != nil {
 		return nil, errors.New("observation canceled")
 	}
+	if err == nil {
+		r.logDiskEstimate(ctx, data)
+	}
 	return result, err
 }
 

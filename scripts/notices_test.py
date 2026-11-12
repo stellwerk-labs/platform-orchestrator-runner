@@ -16,7 +16,7 @@ class Notices(unittest.TestCase):
     def setUpClass(cls):
         cls.workspace = tempfile.TemporaryDirectory(prefix="runner-notices-")
         cls.work = Path(cls.workspace.name)
-        cls.env = {**os.environ, "GOTOOLCHAIN": "go1.26.10", "GOWORK": "off", "GOENV": "off", "CGO_ENABLED": "0", "PYTHONDONTWRITEBYTECODE": "1"}
+        cls.env = {**os.environ, "GOTOOLCHAIN": "go1.26.11", "GOWORK": "off", "GOENV": "off", "CGO_ENABLED": "0", "PYTHONDONTWRITEBYTECODE": "1"}
         for key in ("GOOS", "GOARCH", "GOAMD64", "GOARM64", "GOFLAGS", "GOEXPERIMENT"):
             cls.env.pop(key, None)
         cls.checker = cls.work / "noticecheck"
@@ -90,6 +90,15 @@ class Notices(unittest.TestCase):
                 path.write_text(encoded)
                 self.rehash(bundle)
                 self.assertNotEqual(self.check(bundle).returncode, 0)
+
+    def test_source_vendor_notices_reject_rehashed_tampering(self):
+        for name in ("LICENSE", "SOURCE.json", "pogi.spdx.json"):
+            with self.subTest(name=name):
+                bundle = self.copy()
+                (bundle / "pogi" / name).write_text("changed")
+                self.rehash(bundle)
+                self.assertNotEqual(self.check(bundle).returncode, 0)
+                self.assertNotEqual(self.final(bundle).returncode, 0)
 
     def test_real_closure_rejects_missing_dependency_wrong_graph_and_target(self):
         for kind in ("dependency", "graph", "target", "application", "vendor-source"):

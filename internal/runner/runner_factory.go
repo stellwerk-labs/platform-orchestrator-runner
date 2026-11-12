@@ -29,12 +29,13 @@ func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (R
 	}
 
 	base := &baseRunner{
-		orgID:           cfg.OrgID,
-		deploymentID:    cfg.DeploymentID,
-		folder:          cfg.IaCCodeDir,
-		recipient:       recipient,
-		tool:            string(cfg.IaCBackend),
-		observationOnly: cfg.IsObservation(),
+		orgID:                  cfg.OrgID,
+		deploymentID:           cfg.DeploymentID,
+		folder:                 cfg.IaCCodeDir,
+		recipient:              recipient,
+		tool:                   string(cfg.IaCBackend),
+		observationOnly:        cfg.IsObservation(),
+		costEstimationDisabled: !cfg.CostEstimationEnabled,
 	}
 	client, err := gatewayapi.NewClient(gatewayapi.ClientConfig{
 		BaseURL: cfg.Gateway.URL, OrganizationID: cfg.OrgID, RunnerID: cfg.RunnerID,
