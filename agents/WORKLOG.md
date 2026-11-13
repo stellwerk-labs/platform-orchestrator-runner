@@ -21,3 +21,8 @@ Both actual Linux target executables pass symbol-aware vulnerability scanning; t
 Generation, 160 ordinary unit tests (1 existing optional NATS skip), vet, full pinned lint and the prescribed complexity gates pass.
 The unrelated baseline lint cleanup is separately committed as 83edb33; this feature does not change the OpenTofu release-scoped security hold.
 See DECISIONS.md and LEARNINGS.md for the selected architecture and artifact lessons.
+
+
+## 2026-11-13: Public Runner source preparation
+
+Removed the private installation identifier from the 3.3.0 residual-risk disposition before public source qualification. The accepted version family, exact binaries, advisory inventory and unresolved applicability remain unchanged. No workflow or application behavior changed.

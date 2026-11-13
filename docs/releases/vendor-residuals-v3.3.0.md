@@ -1,7 +1,7 @@
 # Official OpenTofu residuals accepted for Runner 3.3.0
 
 On 13 November 2026 the release owner explicitly accepted the current residual
-risk for this Runner version and requested its deployment to WX1. This decision
+risk for this Runner version and requested its deployment. This decision
 retains the unchanged official OpenTofu 1.13.2 executables. It does not fix the
 vulnerabilities or establish that they are unreachable. A public release remains
 a separate publication action.
