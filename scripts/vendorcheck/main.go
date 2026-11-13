@@ -64,7 +64,7 @@ func check(release, binary, textPath, textExit, jsonPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	arch := map[elf.Machine]string{elf.EM_X86_64: "amd64", elf.EM_AARCH64: "arm64"}[f.Machine]
 	want, ok := p.Artifacts[arch]
 	if !ok || f.Class != elf.ELFCLASS64 || f.Data != elf.ELFDATA2LSB {
@@ -74,7 +74,7 @@ func check(release, binary, textPath, textExit, jsonPath string) error {
 	if err != nil {
 		return err
 	}
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 	h := sha256.New()
 	if _, err := io.Copy(h, input); err != nil {
 		return err

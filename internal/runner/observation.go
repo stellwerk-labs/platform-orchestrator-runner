@@ -186,7 +186,7 @@ func parseObservationPlan(data []byte, tool string) (*api.ObservationResult, err
 		if !validObservationActions(output.Actions) {
 			return nil, invalid
 		}
-		if !(len(output.Actions) == 1 && output.Actions[0] == "no-op") {
+		if len(output.Actions) != 1 || output.Actions[0] != "no-op" {
 			result.OutputChangeCount++
 		}
 	}

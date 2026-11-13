@@ -18,12 +18,12 @@ func capturedReport(t *testing.T) ([]byte, policy) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	z, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer z.Close()
+	defer func() { _ = z.Close() }()
 	data, err := io.ReadAll(z)
 	if err != nil {
 		t.Fatal(err)
