@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -12,9 +13,9 @@ import (
 
 // This is the captured pinned scanner output for the authenticated official
 // OpenTofu executable, including its advisory records and all finding levels.
-func capturedReport(t *testing.T) ([]byte, policy) {
+func capturedReport(t *testing.T, arch string) ([]byte, policy) {
 	t.Helper()
-	f, err := os.Open("testdata/official-tofu-1.13.2.json.gz")
+	f, err := os.Open(fmt.Sprintf("testdata/official-tofu-1.13.2-%s.json.gz", arch))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,31 +37,63 @@ func capturedReport(t *testing.T) ([]byte, policy) {
 }
 
 func TestCapturedOfficialInventory(t *testing.T) {
-	data, p := capturedReport(t)
-	for arch, want := range p.Artifacts {
+	for _, arch := range []string{"amd64", "arm64"} {
 		t.Run(arch, func(t *testing.T) {
-			if err := checkReport(data, p, want); err != nil {
+			data, p := capturedReport(t, arch)
+			if err := checkReport(data, p, p.Artifacts[arch]); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
 }
 
+func TestReviewedReleaseFamily(t *testing.T) {
+	var p policy
+	if err := json.Unmarshal(policyJSON, &p); err != nil {
+		t.Fatal(err)
+	}
+	for _, release := range []string{"v3.3.0", "v3.3.0-rc.1", "v3.3.0-rc.12"} {
+		if err := checkRelease(p, release); err != nil {
+			t.Errorf("reviewed release %q rejected: %v", release, err)
+		}
+	}
+	for _, release := range []string{
+		"", "v3.2.0", "v3.2.0-rc.1", "v3.4.0", "v3.4.0-rc.1", "v3.3.1",
+		"3.3.0", "v3.3.0-rc.0", "v3.3.0-rc.01", "v3.3.0-rc.-1", "v3.3.0-rc.1.1",
+		"v3.3.0-beta.1", "v3.3.0-rc.1+build", "v3.3.0+build", "v3.3.0\n",
+	} {
+		if err := checkRelease(p, release); err == nil {
+			t.Errorf("unreviewed release %q accepted", release)
+		}
+	}
+	for _, changed := range []policy{
+		{SchemaVersion: 2, ReleaseFamily: p.ReleaseFamily},
+		{SchemaVersion: 1, ReleaseFamily: "v3.2.0"},
+		{SchemaVersion: 1, ReleaseFamily: "v3.4.0"},
+	} {
+		if err := checkRelease(changed, "v3.3.0"); err == nil {
+			t.Errorf("unreviewed policy %+v accepted", changed)
+		}
+	}
+}
+
 func TestChangedOrMalformedReportsRejected(t *testing.T) {
-	data, p := capturedReport(t)
+	data, p := capturedReport(t, "amd64")
 	cases := map[string][]byte{
-		"truncated":        data[:len(data)-20],
-		"trailing-object":  append(bytes.Clone(data), '{'),
-		"trailing-garbage": append(bytes.Clone(data), []byte("invalid")...),
-		"unknown-message":  append(bytes.Clone(data), []byte(`{"unknown":{}}`)...),
-		"duplicate-key":    append(bytes.Clone(data), []byte(`{"finding":{},"finding":{}}`)...),
-		"scanner-version":  bytes.ReplaceAll(data, []byte(`"v1.9.0"`), []byte(`"v1.9.1"`)),
-		"scanner-mode":     bytes.ReplaceAll(data, []byte(`"binary"`), []byte(`"source"`)),
-		"binary-compiler":  bytes.ReplaceAll(data, []byte(`"go1.27.3"`), []byte(`"go1.26.10"`)),
-		"database":         bytes.ReplaceAll(data, []byte("https://vuln.go.dev"), []byte("file:///tmp/db")),
-		"fixed-version":    bytes.ReplaceAll(data, []byte(`"v0.60.0"`), []byte(`"v0.61.0"`)),
-		"module-version":   bytes.ReplaceAll(data, []byte(`"v0.57.0"`), []byte(`"v0.57.1"`)),
-		"advisory":         bytes.ReplaceAll(data, []byte("GO-2026-6617"), []byte("GO-2099-9999")),
+		"truncated":         data[:len(data)-20],
+		"trailing-object":   append(bytes.Clone(data), '{'),
+		"trailing-garbage":  append(bytes.Clone(data), []byte("invalid")...),
+		"unknown-message":   append(bytes.Clone(data), []byte(`{"unknown":{}}`)...),
+		"duplicate-key":     append(bytes.Clone(data), []byte(`{"finding":{},"finding":{}}`)...),
+		"scanner-version":   bytes.ReplaceAll(data, []byte(`"v1.9.0"`), []byte(`"v1.9.1"`)),
+		"scanner-mode":      bytes.ReplaceAll(data, []byte(`"binary"`), []byte(`"source"`)),
+		"binary-compiler":   bytes.ReplaceAll(data, []byte(`"go1.27.3"`), []byte(`"go1.26.10"`)),
+		"database":          bytes.ReplaceAll(data, []byte("https://vuln.go.dev"), []byte("file:///tmp/db")),
+		"fixed-version":     bytes.ReplaceAll(data, []byte(`"v0.60.0"`), []byte(`"v0.61.0"`)),
+		"module-version":    bytes.ReplaceAll(data, []byte(`"v0.57.0"`), []byte(`"v0.57.1"`)),
+		"advisory":          bytes.ReplaceAll(data, []byte("GO-2026-6617"), []byte("GO-2099-9999")),
+		"http-advisory":     bytes.ReplaceAll(data, []byte("GO-2026-6859"), []byte("GO-2099-9999")),
+		"compress-advisory": bytes.ReplaceAll(data, []byte("GO-2026-6865"), []byte("GO-2099-9999")),
 	}
 	for name, changed := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -101,7 +134,7 @@ func TestTextExitContract(t *testing.T) {
 }
 
 func TestRemovedOrDuplicatedFindingsRejected(t *testing.T) {
-	data, p := capturedReport(t)
+	data, p := capturedReport(t, "amd64")
 	d := json.NewDecoder(bytes.NewReader(data))
 	var messages []json.RawMessage
 	var finding json.RawMessage

@@ -1,3 +1,258 @@
+Scanning your binary for known vulnerabilities...
+
+Fetching vulnerabilities from the database...
+
+Checking the binary against the vulnerabilities...
+
+The package pattern matched the following root package:
+  github.com/opentofu/opentofu
+Govulncheck scanned the following 245 modules and the go1.27.3 standard library:
+  github.com/opentofu/opentofu@v1.13.2
+  cel.dev/expr@v0.25.2
+  cloud.google.com/go@v0.123.0
+  cloud.google.com/go/auth@v0.23.0
+  cloud.google.com/go/auth/oauth2adapt@v0.2.8
+  cloud.google.com/go/compute/metadata@v0.9.0
+  cloud.google.com/go/iam@v1.12.0
+  cloud.google.com/go/kms@v1.33.0
+  cloud.google.com/go/longrunning@v1.2.0
+  cloud.google.com/go/monitoring@v1.30.0
+  cloud.google.com/go/storage@v1.65.0
+  github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.23.0
+  github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.14.0
+  github.com/Azure/azure-sdk-for-go/sdk/internal@v1.12.0
+  github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources@v1.2.0
+  github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage@v1.8.1
+  github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys@v1.5.0
+  github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal@v1.2.0
+  github.com/Azure/azure-sdk-for-go/sdk/storage/azblob@v1.8.0
+  github.com/AzureAD/microsoft-authentication-library-for-go@v1.7.2
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp@v1.33.0
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric@v0.57.0
+  github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping@v0.57.0
+  github.com/Masterminds/goutils@v1.1.1
+  github.com/Masterminds/semver/v3@v3.4.0
+  github.com/Masterminds/sprig/v3@v3.2.3
+  github.com/ProtonMail/go-crypto@v1.4.1
+  github.com/agext/levenshtein@v1.2.3
+  github.com/aliyun/alibaba-cloud-sdk-go@v1.63.107
+  github.com/aliyun/aliyun-oss-go-sdk@v3.0.2+incompatible
+  github.com/aliyun/aliyun-tablestore-go-sdk@v4.1.3+incompatible
+  github.com/apparentlymart/go-cidr@v1.1.1
+  github.com/apparentlymart/go-shquot@v0.0.1
+  github.com/apparentlymart/go-textseg/v15@v15.0.0
+  github.com/apparentlymart/go-textseg/v17@v17.0.1
+  github.com/apparentlymart/go-userdirs@v0.0.0-20200915174352-b0c018a67c13
+  github.com/apparentlymart/go-versions@v1.0.3
+  github.com/apparentlymart/go-workgraph@v0.0.0-20250609024419-b3453ef8d3e6
+  github.com/armon/circbuf@v0.0.0-20190214190532-5111143e8da2
+  github.com/armon/go-metrics@v0.4.1
+  github.com/armon/go-radix@v1.0.0
+  github.com/aws/aws-sdk-go-v2@v1.43.5
+  github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.7.17
+  github.com/aws/aws-sdk-go-v2/config@v1.32.35
+  github.com/aws/aws-sdk-go-v2/credentials@v1.19.34
+  github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.18.36
+  github.com/aws/aws-sdk-go-v2/internal/configsources@v1.4.36
+  github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.7.36
+  github.com/aws/aws-sdk-go-v2/internal/v4a@v1.4.37
+  github.com/aws/aws-sdk-go-v2/service/dynamodb@v1.63.2
+  github.com/aws/aws-sdk-go-v2/service/iam@v1.56.1
+  github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding@v1.13.16
+  github.com/aws/aws-sdk-go-v2/service/internal/checksum@v1.9.29
+  github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery@v1.12.13
+  github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.13.36
+  github.com/aws/aws-sdk-go-v2/service/internal/s3shared@v1.19.37
+  github.com/aws/aws-sdk-go-v2/service/kms@v1.55.5
+  github.com/aws/aws-sdk-go-v2/service/s3@v1.107.1
+  github.com/aws/aws-sdk-go-v2/service/signin@v1.5.4
+  github.com/aws/aws-sdk-go-v2/service/sns@v1.39.17
+  github.com/aws/aws-sdk-go-v2/service/sqs@v1.46.1
+  github.com/aws/aws-sdk-go-v2/service/sso@v1.33.4
+  github.com/aws/aws-sdk-go-v2/service/ssooidc@v1.38.4
+  github.com/aws/aws-sdk-go-v2/service/sts@v1.45.4
+  github.com/aws/smithy-go@v1.27.7
+  github.com/beorn7/perks@v1.0.1
+  github.com/bgentry/go-netrc@v0.0.0-20140422174119-9fd32a8b3d3d
+  github.com/bgentry/speakeasy@v0.2.0
+  github.com/bmatcuk/doublestar/v4@v4.10.0
+  github.com/cenkalti/backoff/v5@v5.0.3
+  github.com/cespare/xxhash/v2@v2.3.0
+  github.com/chzyer/readline@v1.5.1
+  github.com/clbanning/mxj@v1.8.4
+  github.com/cli/browser@v1.3.0
+  github.com/cloudflare/circl@v1.6.3
+  github.com/cncf/xds/go@v0.0.0-20260202195803-dba9d589def2
+  github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc
+  github.com/emicklei/go-restful/v3@v3.13.0
+  github.com/envoyproxy/go-control-plane/envoy@v1.37.0
+  github.com/envoyproxy/protoc-gen-validate@v1.3.3
+  github.com/fatih/color@v1.19.0
+  github.com/felixge/httpsnoop@v1.1.0
+  github.com/fxamacker/cbor/v2@v2.9.0
+  github.com/go-jose/go-jose/v4@v4.1.4
+  github.com/go-logr/logr@v1.4.4
+  github.com/go-logr/stdr@v1.2.2
+  github.com/go-openapi/jsonpointer@v0.21.0
+  github.com/go-openapi/jsonreference@v0.20.2
+  github.com/go-openapi/swag@v0.23.0
+  github.com/go-viper/mapstructure/v2@v2.5.0
+  github.com/golang-jwt/jwt/v5@v5.3.1
+  github.com/golang/protobuf@v1.5.4
+  github.com/google/gnostic-models@v0.7.0
+  github.com/google/go-cmp@v0.7.0
+  github.com/google/go-querystring@v1.2.0
+  github.com/google/s2a-go@v0.1.9
+  github.com/google/uuid@v1.6.0
+  github.com/googleapis/enterprise-certificate-proxy@v0.3.20
+  github.com/googleapis/gax-go/v2@v2.24.0
+  github.com/grpc-ecosystem/grpc-gateway/v2@v2.29.0
+  github.com/hashicorp/aws-sdk-go-base/v2@v2.0.0-beta.74
+  github.com/hashicorp/consul/api@v1.34.4
+  github.com/hashicorp/errwrap@v1.1.0
+  github.com/hashicorp/go-cleanhttp@v0.5.2
+  github.com/hashicorp/go-getter@v1.8.8
+  github.com/hashicorp/go-hclog@v1.6.3
+  github.com/hashicorp/go-immutable-radix@v1.3.1
+  github.com/hashicorp/go-metrics@v0.6.0
+  github.com/hashicorp/go-multierror@v1.1.1
+  github.com/hashicorp/go-plugin@v1.8.0
+  github.com/hashicorp/go-retryablehttp@v0.7.8
+  github.com/hashicorp/go-rootcerts@v1.0.2
+  github.com/hashicorp/go-secure-stdlib/parseutil@v0.2.0
+  github.com/hashicorp/go-secure-stdlib/strutil@v0.1.2
+  github.com/hashicorp/go-slug@v0.16.8
+  github.com/hashicorp/go-sockaddr@v1.0.7
+  github.com/hashicorp/go-tfe@v1.101.0
+  github.com/hashicorp/go-uuid@v1.0.3
+  github.com/hashicorp/go-version@v1.9.0
+  github.com/hashicorp/golang-lru@v1.0.2
+  github.com/hashicorp/hcl@v1.0.1-vault-7
+  github.com/opentofu/hcl/v2@v2.20.2-0.20260427110253-11bc5ebf0f63
+  github.com/hashicorp/jsonapi@v1.5.0
+  github.com/hashicorp/serf@v0.10.4
+  github.com/hashicorp/terraform-plugin-log@v0.10.1-0.20260721164921-2f73dc013b2c
+  github.com/hashicorp/yamux@v0.1.2
+  github.com/huandu/xstrings@v1.3.3
+  github.com/imdario/mergo@v0.3.13
+  github.com/jmespath/go-jmespath@v0.4.0
+  github.com/josharian/intern@v1.0.0
+  github.com/json-iterator/go@v1.1.12
+  github.com/kardianos/osext@v0.0.0-20190222173326-2bc1f35cddc0
+  github.com/klauspost/compress@v1.19.2
+  github.com/kylelemons/godebug@v1.1.0
+  github.com/lib/pq@v1.12.3
+  github.com/mailru/easyjson@v0.7.7
+  github.com/mattn/go-colorable@v0.1.15
+  github.com/mattn/go-isatty@v0.0.24
+  github.com/mattn/go-shellwords@v1.0.14
+  github.com/mitchellh/cli@v1.1.5
+  github.com/mitchellh/colorstring@v0.0.0-20190213212951-d06e56a500db
+  github.com/mitchellh/copystructure@v1.2.0
+  github.com/mitchellh/go-homedir@v1.1.0
+  github.com/mitchellh/go-linereader@v0.0.0-20190213213312-1b945b3263eb
+  github.com/mitchellh/go-wordwrap@v1.0.1
+  github.com/mitchellh/mapstructure@v1.5.0
+  github.com/mitchellh/reflectwalk@v1.0.2
+  github.com/modern-go/concurrent@v0.0.0-20180306012644-bacd9c7ef1dd
+  github.com/modern-go/reflect2@v1.0.3-0.20250322232337-35a7c28c31ee
+  github.com/mozillazg/go-httpheader@v0.3.0
+  github.com/munnerz/goautoneg@v0.0.0-20191010083416-a7dc8b61c822
+  github.com/oklog/run@v1.1.0
+  github.com/openbao/openbao/api/v2@v2.6.0
+  github.com/opencontainers/go-digest@v1.0.0
+  github.com/opencontainers/image-spec@v1.1.1
+  github.com/opentofu/registry-address/v2@v2.0.0-20260307135325-45f3562374e4
+  github.com/opentofu/svchost@v0.0.0-20260410171206-1a42986aa3f4
+  github.com/opentracing/opentracing-go@v1.2.1-0.20220228012449-10b1cf09e00b
+  github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c
+  github.com/pkg/errors@v0.9.1
+  github.com/posener/complete@v1.2.3
+  github.com/prometheus/client_golang@v1.24.1
+  github.com/prometheus/client_model@v0.6.2
+  github.com/prometheus/common@v0.70.1
+  github.com/prometheus/otlptranslator@v1.0.0
+  github.com/prometheus/procfs@v0.21.1
+  github.com/ryanuber/go-glob@v1.0.0
+  github.com/shopspring/decimal@v1.3.1
+  github.com/spf13/afero@v1.15.0
+  github.com/spf13/cast@v1.5.0
+  github.com/spf13/pflag@v1.0.9
+  github.com/spiffe/go-spiffe/v2@v2.7.0
+  github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common@v1.1.41
+  github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sts@v1.1.11
+  github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tag@v1.1.0
+  github.com/tencentyun/cos-go-sdk-v5@v0.7.70
+  github.com/ulikunitz/xz@v0.5.16
+  github.com/urfave/cli/v3@v3.10.1
+  github.com/vmihailenco/msgpack/v5@v5.3.5
+  github.com/vmihailenco/tagparser/v2@v2.0.0
+  github.com/x448/float16@v0.8.4
+  github.com/xanzy/ssh-agent@v0.3.3
+  github.com/xlab/treeprint@v1.2.0
+  github.com/zclconf/go-cty@v1.19.0
+  github.com/zclconf/go-cty-debug@v0.0.0-20240509010212-0d6042c53940
+  github.com/zclconf/go-cty-yaml@v1.2.0
+  go.opentelemetry.io/auto/sdk@v1.2.1
+  go.opentelemetry.io/contrib/bridges/prometheus@v0.70.0
+  go.opentelemetry.io/contrib/detectors/gcp@v1.44.0
+  go.opentelemetry.io/contrib/exporters/autoexport@v0.70.0
+  go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws@v0.69.0
+  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.68.0
+  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.70.0
+  go.opentelemetry.io/otel@v1.45.0
+  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc@v0.21.0
+  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp@v0.21.0
+  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc@v1.45.0
+  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp@v1.45.0
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.45.0
+  go.opentelemetry.io/otel/exporters/prometheus@v0.67.0
+  go.opentelemetry.io/otel/exporters/stdout/stdoutlog@v0.21.0
+  go.opentelemetry.io/otel/exporters/stdout/stdoutmetric@v1.45.0
+  go.opentelemetry.io/otel/exporters/stdout/stdouttrace@v1.45.0
+  go.opentelemetry.io/otel/log@v0.21.0
+  go.opentelemetry.io/otel/metric@v1.45.0
+  go.opentelemetry.io/otel/sdk@v1.45.0
+  go.opentelemetry.io/otel/sdk/log@v0.21.0
+  go.opentelemetry.io/otel/sdk/metric@v1.45.0
+  go.opentelemetry.io/otel/trace@v1.45.0
+  go.opentelemetry.io/proto/otlp@v1.11.0
+  go.yaml.in/yaml/v2@v2.4.4
+  go.yaml.in/yaml/v3@v3.0.4
+  golang.org/x/crypto@v0.56.0
+  golang.org/x/exp@v0.0.0-20260218203240-3dfff04db8fa
+  golang.org/x/mod@v0.39.0
+  golang.org/x/net@v0.57.0
+  golang.org/x/oauth2@v0.36.0
+  golang.org/x/sync@v0.22.0
+  golang.org/x/sys@v0.47.0
+  golang.org/x/term@v0.45.0
+  golang.org/x/text@v0.41.0
+  golang.org/x/time@v0.15.0
+  google.golang.org/api@v0.293.0
+  google.golang.org/genproto@v0.0.0-20260715232425-e75dac1f907d
+  google.golang.org/genproto/googleapis/api@v0.0.0-20260803160001-6ac0973c030d
+  google.golang.org/genproto/googleapis/rpc@v0.0.0-20260807164820-c8921c73eeea
+  google.golang.org/grpc@v1.83.1
+  google.golang.org/protobuf@v1.36.12
+  gopkg.in/evanphx/json-patch.v4@v4.13.0
+  gopkg.in/inf.v0@v0.9.1
+  gopkg.in/ini.v1@v1.67.0
+  gopkg.in/yaml.v3@v3.0.1
+  k8s.io/api@v0.36.3
+  k8s.io/apimachinery@v0.36.3
+  k8s.io/client-go@v0.36.3
+  k8s.io/klog/v2@v2.140.0
+  k8s.io/kube-openapi@v0.0.0-20260317180543-43fb72c5454a
+  k8s.io/utils@v0.0.0-20260707023825-cf1189d6abe3
+  oras.land/oras-go/v2@v2.6.2
+  sigs.k8s.io/json@v0.0.0-20250730193827-2d320260d730
+  sigs.k8s.io/randfill@v1.0.0
+  sigs.k8s.io/structured-merge-diff/v6@v6.3.3
+  sigs.k8s.io/yaml@v1.6.0
+
 === Symbol Results ===
 
 Vulnerability #1: GO-2026-6866
@@ -10,7 +265,21 @@ Vulnerability #1: GO-2026-6866
     Vulnerable symbols found:
       #1: html.Render
 
-Vulnerability #2: GO-2026-6860
+Vulnerability #2: GO-2026-6865
+    Panic on two-block frames in github.com/klauspost/compress
+  More info: https://pkg.go.dev/vuln/GO-2026-6865
+  Module: github.com/klauspost/compress
+    Found in: github.com/klauspost/compress@v1.19.2
+    Fixed in: github.com/klauspost/compress@v1.20.2
+    Vulnerable symbols found:
+      #1: fse.Compress
+      #2: fse.Decompress
+      #3: huff0.Compress1X
+      #4: huff0.Compress4X
+      #5: huff0.EstimateSizes
+      Use '-show traces' to see the other 2 found symbols
+
+Vulnerability #3: GO-2026-6860
     Avoid quadratic complexity when coalescing text nodes in html in
     golang.org/x/net
   More info: https://pkg.go.dev/vuln/GO-2026-6860
@@ -23,7 +292,21 @@ Vulnerability #2: GO-2026-6860
       #3: html.ParseFragmentWithOptions
       #4: html.ParseWithOptions
 
-Vulnerability #3: GO-2026-6617
+Vulnerability #4: GO-2026-6859
+    HTTP/1 server crash due to MaxBytesReader header race in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6859
+  Standard library
+    Found in: net/http@go1.27.3
+    Fixed in: net/http@go1.27.4
+    Vulnerable symbols found:
+      #1: http.CanonicalHeaderKey
+      #2: http.Client.CloseIdleConnections
+      #3: http.Client.Do
+      #4: http.Client.Get
+      #5: http.Client.Head
+      Use '-show traces' to see the other 144 found symbols
+
+Vulnerability #5: GO-2026-6617
     HTTP/2 server crash due to HPACK encoder race in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6617
   Module: golang.org/x/net
@@ -37,7 +320,7 @@ Vulnerability #3: GO-2026-6617
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #4: GO-2026-6612
+Vulnerability #6: GO-2026-6612
     Double flow control refund on HTTP/2 server streams in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6612
   Module: golang.org/x/net
@@ -51,7 +334,7 @@ Vulnerability #4: GO-2026-6612
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #5: GO-2026-6611
+Vulnerability #7: GO-2026-6611
     Excessive CPU consumption from repeated initial window changes in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6611
   Module: golang.org/x/net
@@ -65,7 +348,7 @@ Vulnerability #5: GO-2026-6611
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 328 found symbols
 
-Vulnerability #6: GO-2026-6610
+Vulnerability #8: GO-2026-6610
     HTTP/2 transport accepts malformed framing-related headers in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6610
   Module: golang.org/x/net
@@ -79,7 +362,7 @@ Vulnerability #6: GO-2026-6610
       #5: http2.Transport.NewClientConn
       Use '-show traces' to see the other 35 found symbols
 
-Vulnerability #7: GO-2026-6603
+Vulnerability #9: GO-2026-6603
     HTTP/2 server memory exhaustion due to Trailer headers in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6603
   Module: golang.org/x/net
@@ -93,7 +376,7 @@ Vulnerability #7: GO-2026-6603
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #8: GO-2026-6443
+Vulnerability #10: GO-2026-6443
     Server panic via missing authority or Host headers in google.golang.org/grpc
   More info: https://pkg.go.dev/vuln/GO-2026-6443
   Module: google.golang.org/grpc
@@ -103,7 +386,7 @@ Vulnerability #8: GO-2026-6443
       #1: server.RouteAndProcess
       #2: transport.http2Server.HandleStreams
 
-Vulnerability #9: GO-2026-6180
+Vulnerability #11: GO-2026-6180
     Ignore unrelated, unauthenticated hashes in Lookup in golang.org/x/mod/sumdb
   More info: https://pkg.go.dev/vuln/GO-2026-6180
   Module: golang.org/x/mod
@@ -112,7 +395,7 @@ Vulnerability #9: GO-2026-6180
     Vulnerable symbols found:
       #1: sumdb.Client.Lookup
 
-Vulnerability #10: GO-2026-6179
+Vulnerability #12: GO-2026-6179
     Fix transparency log tile verification bypass in golang.org/x/mod/sumdb/tlog
   More info: https://pkg.go.dev/vuln/GO-2026-6179
   Module: golang.org/x/mod
@@ -121,7 +404,7 @@ Vulnerability #10: GO-2026-6179
     Vulnerable symbols found:
       #1: tlog.tileHashReader.ReadHashes
 
-Vulnerability #11: GO-2026-5932
+Vulnerability #13: GO-2026-5932
     The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design,
     and has known security issues
   More info: https://pkg.go.dev/vuln/GO-2026-5932
@@ -136,8 +419,15 @@ Vulnerability #11: GO-2026-5932
       #5: openpgp.golang.org/x/crypto/openpgp/*
       Use '-show traces' to see the other 2 found symbols
 
-Your code is affected by 11 vulnerabilities from 4 modules.
+=== Package Results ===
+
+No other vulnerabilities found.
+
+=== Module Results ===
+
+No other vulnerabilities found.
+
+Your code is affected by 13 vulnerabilities from 5 modules and the Go standard library.
 This scan found no other vulnerabilities in packages you import or modules you
 require.
-Use '-show verbose' for more details.
 exit status 3

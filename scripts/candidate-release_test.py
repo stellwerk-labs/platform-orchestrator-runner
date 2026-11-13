@@ -194,10 +194,12 @@ class CandidateReleaseTests(unittest.TestCase):
 
     def test_integration_final_image_requires_actual_release_context(self):
         root = Path(__file__).parents[1]
-        for workflow, expected in (("ci.yaml", "v3.2.0"),
+        for workflow, expected in (("ci.yaml", "v3.3.0"),
                                    ("build-and-push.yaml", "${{ inputs.candidate_tag || github.ref_name }}")):
             text = (root / ".github/workflows" / workflow).read_text()
             jobs = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", text, re.M | re.S))
+            if workflow == "ci.yaml":
+                self.assertIn("--build-arg RELEASE_VERSION=" + expected + " ", jobs["test-unit"])
             integration = jobs["test-integration"]
             self.assertIn("RELEASE_VERSION: " + expected, integration)
             self.assertLess(integration.index("uses: docker/setup-buildx-action@v4"),
@@ -205,7 +207,7 @@ class CandidateReleaseTests(unittest.TestCase):
         environment = dict(os.environ)
         environment.pop("RELEASE_VERSION", None)
         command = ["make", "--no-print-directory", "-n", "-C", "integration-tests"]
-        for version in ("v3.2.0-rc.1", "v3.2.0"):
+        for version in ("v3.3.0-rc.1", "v3.3.0"):
             result = subprocess.run(command + ["build-platform-orchestrator-runner"], cwd=root,
                                     env=dict(environment, RELEASE_VERSION=version),
                                     capture_output=True, text=True, timeout=10)

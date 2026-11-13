@@ -53,8 +53,8 @@ func check(release, binary, textPath, textExit, jsonPath string) error {
 	if err := json.Unmarshal(policyJSON, &p); err != nil {
 		return err
 	}
-	if p.SchemaVersion != 1 || p.ReleaseFamily != "v3.2.0" || !regexp.MustCompile(`^v3\.2\.0(-rc\.[1-9][0-9]*)?$`).MatchString(release) {
-		return fmt.Errorf("release is outside the reviewed v3.2.0 family")
+	if err := checkRelease(p, release); err != nil {
+		return err
 	}
 	info, err := os.Lstat(binary)
 	if err != nil || !info.Mode().IsRegular() {
@@ -97,6 +97,13 @@ func check(release, binary, textPath, textExit, jsonPath string) error {
 		return fmt.Errorf("scanner report exceeds bound")
 	}
 	return checkReport(data, p, want)
+}
+
+func checkRelease(p policy, release string) error {
+	if p.SchemaVersion != 1 || p.ReleaseFamily != "v3.3.0" || !regexp.MustCompile(`^v3\.3\.0(-rc\.[1-9][0-9]*)?$`).MatchString(release) {
+		return fmt.Errorf("release is outside the reviewed v3.3.0 family")
+	}
+	return nil
 }
 
 func checkText(text []byte, status string) error {
