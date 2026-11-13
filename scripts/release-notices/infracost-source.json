@@ -1,0 +1,21 @@
+{
+  "name": "infracost",
+  "version": "v0.10.49",
+  "sourceCommit": "40ad0ac9f247d883884cd0f60057367b4af3df08",
+  "sourceURL": "https://github.com/infracost/infracost/tree/40ad0ac9f247d883884cd0f60057367b4af3df08",
+  "archiveURL": "https://codeload.github.com/infracost/infracost/tar.gz/40ad0ac9f247d883884cd0f60057367b4af3df08",
+  "archiveSHA256": "c186b132419769525508623b29a1122a5af006f63136e96abdedf5f12ec2cce3",
+  "goModSHA256": "7af651dda192024bc02ea43a3c74928093f761bd749774425f928c71dbce35e7",
+  "goSumSHA256": "28dad663d9683a319fddd105025db5f75457e39db4108b80eb9e98d68ce8da93",
+  "licenseSHA256": "de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad",
+  "license": "Apache-2.0",
+  "compiler": "go1.26.11",
+  "buildVersion": "v0.10.49+stellwerk.1",
+  "compatibilityPatchSHA256": "c75b4b058e2820aa2e90c40285280b7c0f6a48c994546b68fba7c00b53ff08ed",
+  "effectiveGoModSHA256": "7325e70ec3422201367775712882e112125164867cfa8f3c6d30573f1eac2aee",
+  "effectiveGoSumSHA256": "93baaaaf9c41ed875d366fc95b5159dbe6efddc80d3b9c5dca37944a55e95c00",
+  "correspondingSourceSHA256": {
+    "linux/amd64": "95aaa49dd3e403c073d72357cd6a019490a534f234c70686cf91878eea2ad8e8",
+    "linux/arm64": "95aaa49dd3e403c073d72357cd6a019490a534f234c70686cf91878eea2ad8e8"
+  }
+}

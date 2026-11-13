@@ -15,8 +15,7 @@ go version -m "$(command -v go-licenses)" | grep -F "$go_licenses_module" | grep
 module="$(go list -m -f '{{.Path}}')"
 work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
-# Go module collection ignores the application module. Its MIT source-vendored
-# Pogi closure is checked separately below. External dependencies require notices.
+# Go module collection ignores the application module. External dependencies require notices.
 go list -deps -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}|{{with .Replace}}{{if .Version}}remote{{else}}local{{end}}{{end}}{{end}}' "$@" > "$work/modules"
 sort -u "$work/modules" | sed '/^$/d' > "$work/unique"
 ignore="$module"
@@ -65,11 +64,6 @@ done < "$work/unique"
 go-licenses save "$@" --ignore "$ignore" --save_path "$output"
 mkdir -p "$output/application" "$output/go"
 cp "$root/LICENSE" "$output/application/LICENSE"
-# Source-vendored Pogi is MIT, distinct from this application's root licence.
-mkdir "$output/pogi"
-for notice in LICENSE SOURCE.json pogi.spdx.json; do
-  cp "$root/internal/thirdparty/pogi/$notice" "$output/pogi/$notice"
-done
 goroot="$(go env GOROOT)"
 cp "$goroot/LICENSE" "$goroot/PATENTS" "$output/go/"
 cut -d '|' -f 1,2 "$work/unique" > "$output/modules.txt"
@@ -115,6 +109,7 @@ for notice in LICENSE README.md CHANGELOG.md; do
   cp "$OPENTOFU_NOTICES_DIR/$notice" "$output/opentofu/$notice"
 done
 cp "$root/scripts/release-notices/opentofu-source.json" "$output/opentofu/SOURCE.json"
+sh "$root/scripts/collect-infracost-licenses.sh" "$output/infracost"
 target_arch="$GOARCH"
 # The verifier runs on the build host, while querying the actual target graph.
 (unset GOOS GOARCH GOAMD64 GOARM64; go run ./scripts/noticecheck "$output" "$root" "$target_arch")

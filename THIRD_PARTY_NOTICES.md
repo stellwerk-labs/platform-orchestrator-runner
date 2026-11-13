@@ -1,14 +1,17 @@
-Pogi pricing source is separately licensed under MIT, copyright (c) 2026 nrndev.
-The Runner's root EUPL licence does not relicense this source.
+Runner includes a separate Apache-2.0 Infracost executable, version `v0.10.49`, source commit `40ad0ac9f247d883884cd0f60057367b4af3df08`.
+Its licence is independent of Runner's EUPL licence.
 
-Runner includes only the selected Pogi v0.2.0 pricing core, Terraform model and embedded price catalogues, pinned to commit `002937be7308b8fe3f9f5d65698c49d47b65aaf6`.
-The complete upstream MIT licence, including its excluded-icon notice, is preserved in `internal/thirdparty/pogi/LICENSE`.
-No icons, emulator service models, discovery documents, or Azure REST specifications are included.
-`internal/thirdparty/pogi/SOURCE.json` records the exact original and adapted SHA256 of every selected file, the import-path-only modification and catalogue provenance.
-`internal/thirdparty/pogi/pogi.spdx.json` identifies the MIT source component separately from Go modules.
+The image builds the pinned source using Go `1.26.11` and does not bundle upstream Terraform versions, installer helpers or v2 plugins.
+`scripts/release-notices/infracost-source.json` records the source archive, licence and Go module input hashes.
+`/licenses/infracost/` includes the original licence, provenance, actual target production module graph, dependency legal notices, detected licence report, executable build receipt and SPDX dependency inventory.
+The production collector validates these against the exact source and executable for each supported architecture.
 
-Production images ship these 3 notice and provenance files under `/licenses/pogi/`.
-Release notice validation checks the exact source closure, the preserved MIT licence and SPDX component, and rejects changed or missing copies.
-Catalogue updates require a reviewed source pin and hash update; Runner performs no network price refresh.
+The Infracost Cloud Pricing API is a separate hosted service.
+Enablement and customer API credentials are installation settings, not a licence to redistribute that service or its pricing data.
 
-Run `python3 scripts/vendor-pogi.py PINNED_UPSTREAM_SOURCE` to reproduce the selected files offline. It checks the manifest bound to the exact upstream commit and every original byte before applying the sole import rewrite.
+This executable is identified as `v0.10.49+stellwerk.1`, not an unmodified upstream binary.
+An isolated private module-cache build upgrades `golang.org/x/crypto` to `v0.59.0` and its 7 required companion modules, and changes 6 obsolete OpenPGP imports in 4 existing dependency files to the already included maintained ProtonMail implementation.
+`scripts/infracost-patches/PATCHES.json` records every original and patched file hash plus the effective module input hashes.
+The original upstream archive and shared Go module cache are never modified.
+The Go module archives are verified before the 4 explicit source patches; exact after-hashes validate those files afterward.
+The final binary retains its symbols for accurate vulnerability checking, and the licence bundle preserves the exact changed source files and effective dependency graph.

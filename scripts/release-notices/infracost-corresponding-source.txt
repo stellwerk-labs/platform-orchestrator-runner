@@ -1,0 +1,16 @@
+Infracost corresponding source
+
+corresponding-source.tar.gz preserves the complete tree emitted by the pinned
+Go licence collector for this executable's effective dependencies, including
+source required by reciprocal licences such as MPL-2.0. It includes the actual
+modified Terraform and TFLint source used in this build.
+
+Extract into a new directory:
+  mkdir corresponding-source
+  tar -xzf corresponding-source.tar.gz -C corresponding-source
+
+Each component retains its own licence and copyright notices. The archive uses
+the collector's library directory layout. modules.txt records exact module
+identities and checksums; build/PATCHES.json and build/go.mod/go.sum record the
+bounded compatibility patch and effective dependency selection. The executable's
+upstream source archive and original hashes are recorded in SOURCE.json.

@@ -38,7 +38,7 @@ output "private" {
  sensitive = true
 }
 `), 0600))
-			r := baseRunner{folder: dir, binaryPath: binary, tool: "opentofu", observationOnly: test.observation, costEstimationDisabled: test.disabled}
+			r := baseRunner{folder: dir, binaryPath: binary, tool: "opentofu", observationOnly: test.observation, costEstimationEnabled: !test.disabled}
 			var logs bytes.Buffer
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 			if test.observation {
@@ -74,7 +74,7 @@ func TestCostFailurePreservesPlanAndObservation(t *testing.T) {
 			// The valid plan exceeds only the estimator's stricter 8 MiB boundary.
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "payload"), bytes.Repeat([]byte("S"), maxCostPlanBytes), 0600))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte(`resource "terraform_data" "private" { input = file("payload") }`), 0600))
-			r := baseRunner{folder: dir, binaryPath: binary, tool: "opentofu", observationOnly: mode == "observation"}
+			r := baseRunner{folder: dir, binaryPath: binary, tool: "opentofu", observationOnly: mode == "observation", costEstimationEnabled: true, infracostAPIKey: "TEST_KEY"}
 			var logs bytes.Buffer
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 			if mode == "observation" {

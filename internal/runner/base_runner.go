@@ -20,15 +20,18 @@ import (
 // baseRunner holds the fields and shared logic used by all local IaC runners.
 // It is not exported and is embedded by the concrete runner types.
 type baseRunner struct {
-	orgID                  string
-	deploymentID           string
-	folder                 string
-	binaryPath             string
-	tool                   string
-	observationOnly        bool
-	costEstimationDisabled bool
-	recipient              age.Recipient
-	bundleLoader           func(context.Context) ([]byte, error)
+	orgID                 string
+	deploymentID          string
+	folder                string
+	binaryPath            string
+	tool                  string
+	observationOnly       bool
+	costEstimationEnabled bool
+	infracostAPIKey       string
+	costBinary            string
+	costEndpoint          string
+	recipient             age.Recipient
+	bundleLoader          func(context.Context) ([]byte, error)
 }
 
 func (r *baseRunner) planFile() string {
@@ -127,7 +130,7 @@ func (r *baseRunner) plan(ctx context.Context, extraFlags ...string) (string, ma
 	if err != nil {
 		return out, plannedOutput, nil, err
 	}
-	r.logDiskEstimate(ctx, []byte(planOut))
+	r.logCostEstimate(ctx, []byte(planOut))
 	return out, plannedOutput, changes, nil
 }
 

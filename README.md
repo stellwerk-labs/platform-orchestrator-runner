@@ -60,6 +60,6 @@ Publishing behavior:
 Pushing a signed `v*.*.*` tag builds the AMD64 and ARM64 image, pushes the exact
 tag to GHCR, and creates a GitHub release from `docs/releases/<tag>.md`.
 
-## Offline plan cost estimates
+## Infrastructure cost estimates
 
-Runner logs approximate monthly base disk costs after successful manual and Drift plan inspection, enabled by default. Set `COST_ESTIMATION_ENABLED=false` to opt out. The initial subset covers eligible AWS GP3 EBS and Azure Premium managed disks, with explicit partial/unpriced coverage and pinned `2026-10-20` USD catalogues. No network or pricing account is required. See [eligibility and limits](docs/cost-estimation.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+Runner can log advisory monthly infrastructure cost estimates after successful manual and Drift plan inspection. Estimation defaults to disabled and requires installation Admin enablement and a customer-owned Infracost API key. See [cost estimation](docs/cost-estimation.md).

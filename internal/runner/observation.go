@@ -67,7 +67,7 @@ func (r *baseRunner) Observe(ctx context.Context) (result *api.ObservationResult
 		return nil, errors.New("observation canceled")
 	}
 	if err == nil {
-		r.logDiskEstimate(ctx, data)
+		r.logCostEstimate(ctx, data)
 	}
 	return result, err
 }
@@ -76,7 +76,7 @@ func (r *baseRunner) Observe(ctx context.Context) (result *api.ObservationResult
 func (r *baseRunner) observationCommand(ctx context.Context, limit int, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, r.binaryPath, args...)
 	cmd.WaitDelay = 2 * time.Second
-	for _, env := range os.Environ() {
+	for _, env := range infrastructureEnvironment() {
 		key, _, _ := strings.Cut(env, "=")
 		if strings.HasPrefix(key, "TF_CLI_ARGS") || strings.HasPrefix(key, "TF_LOG") || strings.HasPrefix(key, "TOFU_LOG") {
 			continue

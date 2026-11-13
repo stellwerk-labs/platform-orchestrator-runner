@@ -50,7 +50,8 @@ const (
 )
 
 type StandardModeConfiguration struct {
-	CostEstimationEnabled bool           `env:"COST_ESTIMATION_ENABLED,default=true"`
+	InfracostAPIKey       string         `env:"INFRACOST_API_KEY"`
+	CostEstimationEnabled bool           `env:"COST_ESTIMATION_ENABLED,default=false"`
 	LogLevel              string         `env:"LOG_LEVEL, default=info"`
 	OrgID                 string         `env:"ORG_ID,required"`
 	RunnerID              string         `env:"RUNNER_ID,required"`

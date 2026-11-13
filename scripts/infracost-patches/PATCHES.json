@@ -1,0 +1,60 @@
+{
+  "purpose": "Replace removed unmaintained OpenPGP imports with the existing maintained ProtonMail dependency; no estimator logic changes.",
+  "sourceCommit": "40ad0ac9f247d883884cd0f60057367b4af3df08",
+  "modSHA256": "7325e70ec3422201367775712882e112125164867cfa8f3c6d30573f1eac2aee",
+  "sumSHA256": "93baaaaf9c41ed875d366fc95b5159dbe6efddc80d3b9c5dca37944a55e95c00",
+  "files": [
+    {
+      "module": "github.com/google/go-github/v41",
+      "version": "v41.0.0",
+      "path": "github/git_commits.go",
+      "beforeSHA256": "643c1d0f0ae50f793339be3c2add2222ab760012737f4950428ce3a00f8e8059",
+      "afterSHA256": "15e0761414dcc25adc32f176296c96f5667669182dda8bd8e2dc4d8e8af90cbc",
+      "replacements": 1
+    },
+    {
+      "module": "github.com/hashicorp/terraform",
+      "version": "v0.15.3",
+      "path": "internal/getproviders/package_authentication.go",
+      "beforeSHA256": "870682086f1c52ddddbec677732120e2c45dec44574ea63e34600528067352e1",
+      "afterSHA256": "f2ef1adef1846067b852ae71f61b74ac104334b94300474e9489f7a2aabb151a",
+      "replacements": 3,
+      "edits": [
+        {
+          "before": "_, err = openpgp.CheckDetachedSignature(hashicorpKeyring, bytes.NewReader(s.Document), bytes.NewReader(s.Signature))",
+          "after": "_, err = openpgp.CheckDetachedSignature(hashicorpKeyring, bytes.NewReader(s.Document), bytes.NewReader(s.Signature), nil)"
+        },
+        {
+          "before": "_, err = openpgp.CheckDetachedSignature(hashicorpPartnersKeyring, authorKey.Body, trustSignature.Body)",
+          "after": "_, err = openpgp.CheckDetachedSignature(hashicorpPartnersKeyring, authorKey.Body, trustSignature.Body, nil)"
+        },
+        {
+          "before": "entity, err := openpgp.CheckDetachedSignature(keyring, bytes.NewReader(s.Document), bytes.NewReader(s.Signature))",
+          "after": "entity, err := openpgp.CheckDetachedSignature(keyring, bytes.NewReader(s.Document), bytes.NewReader(s.Signature), nil)"
+        }
+      ]
+    },
+    {
+      "module": "github.com/google/go-github/v35",
+      "version": "v35.3.0",
+      "path": "github/git_commits.go",
+      "beforeSHA256": "643c1d0f0ae50f793339be3c2add2222ab760012737f4950428ce3a00f8e8059",
+      "afterSHA256": "15e0761414dcc25adc32f176296c96f5667669182dda8bd8e2dc4d8e8af90cbc",
+      "replacements": 1
+    },
+    {
+      "module": "github.com/terraform-linters/tflint",
+      "version": "v0.46.1",
+      "path": "plugin/signature.go",
+      "beforeSHA256": "0573f61a587bf2a26ebf374e6961a0b0487ee8a1a0c13c9bd22831deef7b6926",
+      "afterSHA256": "16ae08caf280f4e0ce0c928e3da91f9563209142523ec874c52455d2a8730919",
+      "replacements": 1,
+      "edits": [
+        {
+          "before": "_, err = openpgp.CheckDetachedSignature(keyring, target, signature)",
+          "after": "_, err = openpgp.CheckDetachedSignature(keyring, target, signature, nil)"
+        }
+      ]
+    }
+  ]
+}

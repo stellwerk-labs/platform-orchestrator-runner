@@ -2,35 +2,30 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 )
 
-func (r *baseRunner) logDiskEstimate(ctx context.Context, data []byte) {
-	if r.costEstimationDisabled {
+func (r *baseRunner) logCostEstimate(ctx context.Context, data []byte) {
+	if !r.costEstimationEnabled {
 		return
 	}
-	estimate, err := estimateDisks(data)
-	status := "known"
-	if estimate.Unpriced+estimate.Unknown > 0 {
+	estimate, reason := r.estimateCosts(ctx, data)
+	status := "estimated"
+	if estimate.Unknown+estimate.Unpriced+estimate.MissingUsage > 0 {
 		status = "partial"
 	}
-	if estimate.Priced+estimate.Free == 0 {
+	if estimate.Monthly == "" {
 		status = "unknown"
 	}
-	attrs := []any{"framework", "pogi", "framework_version", "0.2.0", "currency", "USD", "estimate_for", "planned_resources", "catalogue_date", costCatalogueDate, "catalogue_source", "AWS Price List bulk files; Azure Retail Prices API", "catalogue_age_days", int(time.Since(time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)).Hours() / 24), "resources", estimate.Resources, "priced_resources", estimate.Priced, "free_resources", estimate.Free, "unpriced_resources", estimate.Unpriced, "unknown_resources", estimate.Unknown}
-	if err != nil {
-		attrs = append(attrs, "status", "unknown", "reason", "invalid_plan_or_unavailable_catalogue")
-		slog.WarnContext(ctx, "Monthly base disk estimate unavailable", slog.Group("cost_estimation", attrs...))
+	attrs := []any{"framework", "infracost", "framework_version", infracostVersion, "framework_build", infracostBuild, "currency", "USD", "estimate_for", "planned_resources", "pricing_source", "infracost_cloud_pricing_api", "catalogue_updated_at", "unknown", "upstream_defaults_possible", true, "resources", estimate.Resources, "priced_resources", estimate.Priced, "free_resources", estimate.Free, "unpriced_resources", estimate.Unpriced, "unknown_resources", estimate.Unknown, "missing_usage_resources", estimate.MissingUsage}
+	if reason != "" {
+		attrs = append(attrs, "status", "unknown", "reason", reason)
+		slog.WarnContext(ctx, "Monthly infrastructure estimate unavailable", slog.Group("cost_estimation", attrs...))
 		return
 	}
-	message := "Monthly base disk estimate: unknown"
-	if estimate.Priced > 0 || estimate.Resources > 0 && estimate.Free == estimate.Resources {
-		amount := fmt.Sprintf("%.2f", estimate.Monthly)
-		attrs = append(attrs, "known_monthly_subtotal", amount)
-		message = "Monthly base disk estimate: USD " + amount + " (" + status + ")"
+	if estimate.Monthly != "" {
+		attrs = append(attrs, "estimated_monthly_subtotal", estimate.Monthly)
 	}
 	attrs = append(attrs, "status", status)
-	slog.InfoContext(ctx, message, slog.Group("cost_estimation", attrs...))
+	slog.InfoContext(ctx, "Monthly infrastructure estimate", slog.Group("cost_estimation", attrs...))
 }

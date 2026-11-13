@@ -3,15 +3,17 @@
 set -eu
 bundle="${1:?notice directory required}"
 test -d "$bundle" && test ! -L "$bundle"
-for required in application/LICENSE go/LICENSE go/PATENTS modules.txt target.txt manifest.sha256 opentofu/LICENSE opentofu/README.md opentofu/CHANGELOG.md opentofu/SOURCE.json pogi/LICENSE pogi/SOURCE.json pogi/pogi.spdx.json; do
+for required in application/LICENSE go/LICENSE go/PATENTS modules.txt target.txt manifest.sha256 opentofu/LICENSE opentofu/README.md opentofu/CHANGELOG.md opentofu/SOURCE.json infracost/LICENSE infracost/SOURCE-AVAILABILITY.txt infracost/corresponding-source.tar.gz infracost/SOURCE.json infracost/build/PATCHES.json infracost/build/go.mod infracost/build/go.sum infracost/modules.txt infracost/buildinfo.txt infracost/binary.sha256 infracost/infracost.spdx.json; do
   test -f "$bundle/$required" && test -s "$bundle/$required" && test ! -L "$bundle/$required"
 done
 test -z "$(find "$bundle" -type l -print)"
 test "$(sha256sum "$bundle/opentofu/LICENSE" | cut -d ' ' -f 1)" = 142b957651baf401646dd7f3d855cb7c4f6f0921d645faa27e7cb540bc33cf4c
 test "$(sha256sum "$bundle/opentofu/SOURCE.json" | cut -d ' ' -f 1)" = 224f71756dd0832e678cdbb950bdcfe7d2966c4e32d2a76e77bccd4c0180ba6c
-test "$(sha256sum "$bundle/pogi/LICENSE" | cut -d ' ' -f 1)" = 3243ac7affae1bc6a42a7c6806e51a361fa77f91859a03425a48710ae514f34e
-test "$(sha256sum "$bundle/pogi/SOURCE.json" | cut -d ' ' -f 1)" = 1a7de1e55c216535392b227276c71fc94ca39268959c7619e9848bb05d669176
-test "$(sha256sum "$bundle/pogi/pogi.spdx.json" | cut -d ' ' -f 1)" = bb288432ad8370fd53c08bdf2bedde10121f07edd774c6778b628df2c2f632cf
+test "$(sha256sum "$bundle/infracost/LICENSE" | cut -d ' ' -f 1)" = de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad
+test "$(sha256sum "${INFRACOST_BINARY:-/opt/runner/infracost}" | cut -d ' ' -f 1)" = "$(cat "$bundle/infracost/binary.sha256")"
+test "$(sha256sum "$bundle/infracost/SOURCE.json" | cut -d ' ' -f 1)" = e03529cfa4a1803cef8748fff0a15d65785dfe12917b3f0096042174afe5f81f
+test "$(sha256sum "$bundle/infracost/build/PATCHES.json" | cut -d ' ' -f 1)" = c75b4b058e2820aa2e90c40285280b7c0f6a48c994546b68fba7c00b53ff08ed
+test "$(sha256sum "$bundle/infracost/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = 95aaa49dd3e403c073d72357cd6a019490a534f234c70686cf91878eea2ad8e8
 work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
 cd "$bundle"

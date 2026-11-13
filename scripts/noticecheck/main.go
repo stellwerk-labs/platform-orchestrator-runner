@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -18,6 +17,28 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "infracost-archive" {
+		if err := archiveInfracostSources(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if len(os.Args) == 5 && os.Args[1] == "prepare-infracost" {
+		if err := prepareInfracostPatches(os.Args[2], os.Args[3], os.Args[4]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 7 && os.Args[1] == "infracost" {
+		if err := collectInfracost(os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) != 4 {
 		fmt.Fprintln(os.Stderr, "usage: noticecheck BUNDLE SOURCE_ROOT amd64|arm64")
 		os.Exit(2)
@@ -30,7 +51,7 @@ func main() {
 func hash(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
 func gitBlob(data []byte) string {
 	h := sha1.New()
-	fmt.Fprintf(h, "blob %d%c", len(data), 0)
+	_, _ = fmt.Fprintf(h, "blob %d%c", len(data), 0)
 	h.Write(data)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -56,10 +77,13 @@ func same(first, second string) error {
 	return nil
 }
 func command(root, arch string, args ...string) ([]byte, error) {
-	cmd := exec.Command("go", args...)
+	cmd, err := noticeGoCommand(args...)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = root
 	env := os.Environ()
-	for _, item := range []string{"GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=0", "GOWORK=off", "GOENV=off", "GOTOOLCHAIN=go1.26.11", "GOFLAGS=", "GOEXPERIMENT="} {
+	for _, item := range []string{"GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=0", "GOWORK=off", "GOENV=off", "GOTOOLCHAIN=local", "GOFLAGS=", "GOEXPERIMENT="} {
 		key := strings.SplitN(item, "=", 2)[0] + "="
 		filtered := env[:0]
 		for _, old := range env {
@@ -112,7 +136,7 @@ func receipt(data []byte) (map[string]string, error) {
 	return result, nil
 }
 func check(bundle, root, arch string) error {
-	if err := checkPogi(bundle, root); err != nil {
+	if err := checkInfracost(bundle, root, arch); err != nil {
 		return err
 	}
 	if arch != "amd64" && arch != "arm64" {
@@ -121,7 +145,12 @@ func check(bundle, root, arch string) error {
 	if runtime.Version() != "go1.26.11" {
 		return fmt.Errorf("unexpected notice verifier compiler")
 	}
-	for target, source := range map[string]string{"application/LICENSE": filepath.Join(root, "LICENSE"), "go/LICENSE": filepath.Join(runtime.GOROOT(), "LICENSE"), "go/PATENTS": filepath.Join(runtime.GOROOT(), "PATENTS"), "opentofu/SOURCE.json": filepath.Join(root, "scripts/release-notices/opentofu-source.json")} {
+	goCommand, err := noticeGoCommand()
+	if err != nil {
+		return err
+	}
+	goroot := filepath.Dir(filepath.Dir(goCommand.Path))
+	for target, source := range map[string]string{"application/LICENSE": filepath.Join(root, "LICENSE"), "go/LICENSE": filepath.Join(goroot, "LICENSE"), "go/PATENTS": filepath.Join(goroot, "PATENTS"), "opentofu/SOURCE.json": filepath.Join(root, "scripts/release-notices/opentofu-source.json")} {
 		if err := same(filepath.Join(bundle, target), source); err != nil {
 			return err
 		}

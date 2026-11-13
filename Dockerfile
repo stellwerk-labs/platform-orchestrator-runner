@@ -38,14 +38,30 @@ RUN --mount=target=. \
     --mount=type=cache,target=/root/.cache/go-build \
     GOARCH="$TARGETARCH" go build -o /opt/runner/runner ./cmd/runner
 
-FROM builder AS security
+FROM builder AS infracost
+
+RUN apk add --no-cache curl
+RUN sh /app/scripts/prepare-infracost.sh /infracost-source
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOTOOLCHAIN=local GOMAXPROCS=2 go run -p=2 ./scripts/noticecheck prepare-infracost /infracost-build /infracost-source /app
+WORKDIR /infracost-build/source
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    sh /app/scripts/build-infracost.sh /infracost-build/source /opt/infracost/infracost "$TARGETARCH"
+
+FROM infracost AS security
+
+WORKDIR /app
 
 ARG RELEASE_VERSION
+ENV INFRACOST_SOURCE_DIR=/infracost-source INFRACOST_BINARY=/opt/infracost/infracost INFRACOST_BUILD_DIR=/infracost-build
 COPY --from=tofu /tofu /opt/runner/tofu
 COPY --from=tofu /LICENSE /README.md /CHANGELOG.md /opt/opentofu-notices/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh scripts/check-go-security.sh binary /opt/runner/runner \
+    && sh scripts/check-go-security.sh binary /opt/infracost/infracost \
     && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu \
     && GOARCH="$TARGETARCH" OPENTOFU_NOTICES_DIR=/opt/opentofu-notices \
        sh scripts/collect-licenses.sh /opt/licenses ./cmd/runner
@@ -62,6 +78,8 @@ RUN apk add --no-cache git
 COPY --from=artifact-test-builder /opt/runner/artifact-tests /opt/runner/artifact-tests
 COPY --from=tofu /tofu /usr/local/bin/tofu
 COPY --from=legacy-tofu /legacy/tofu /opt/runner/legacy-tofu
+COPY --from=infracost /opt/infracost/infracost /opt/runner/infracost
+RUN --network=none /opt/runner/artifact-tests -test.run '^TestInfracost' -test.v
 RUN --network=none IAC_LEGACY_BINARY=/opt/runner/legacy-tofu \
     /opt/runner/artifact-tests -test.run '^TestArtifactExecutionPreservesLegacyHistory$' -test.v
 RUN --network=none IAC_TEST_BINARIES=tofu \
@@ -86,6 +104,7 @@ RUN chown ${NOBODY_UID}:${NOBODY_GID} /.cache /.config /.local /opt/runner/tofu
 USER ${NOBODY_UID}
 COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/runner /opt/runner/runner
 COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/runner/tofu /usr/local/bin/tofu
+COPY --from=security /opt/infracost/infracost /opt/runner/infracost
 COPY --chown=${NOBODY_UID}:${NOBODY_GID} --from=security /opt/licenses /licenses
 RUN --mount=type=bind,source=scripts/validate-notices.sh,target=/tmp/validate-notices.sh,readonly \
     sh /tmp/validate-notices.sh /licenses

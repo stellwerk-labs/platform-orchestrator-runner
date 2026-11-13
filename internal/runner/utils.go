@@ -16,6 +16,7 @@ import (
 
 func runCmd(ctx context.Context, command string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Env = infrastructureEnvironment()
 	if stdout, err := cmd.CombinedOutput(); err != nil {
 		return string(stdout), errors.Wrapf(err, "%s", string(stdout))
 	} else {
@@ -80,4 +81,17 @@ func unarchiveBundleToFolder(gzipBuf []byte, destDir string) error {
 			}
 		}
 	}
+}
+
+// The estimator credential must never reach Terraform or its provider processes.
+func infrastructureEnvironment() []string {
+	env := []string{}
+	for _, value := range os.Environ() {
+		key, _, _ := strings.Cut(value, "=")
+		if strings.EqualFold(key, "INFRACOST_API_KEY") {
+			continue
+		}
+		env = append(env, value)
+	}
+	return env
 }
