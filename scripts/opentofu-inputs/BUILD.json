@@ -1,0 +1,23 @@
+{
+  "version": "1.13.9-stellwerk.remediation.20261123.1",
+  "upstreamVersion": "v1.13.9",
+  "sourceCommit": "c83e7e50daff10ac704cb0811e9ffd0ad2523759",
+  "sourceURL": "https://github.com/opentofu/opentofu/tree/c83e7e50daff10ac704cb0811e9ffd0ad2523759",
+  "moduleSum": "h1:puhUVG+Bbvs48rQIkyNWNHqD4HiTQ26qen06qrc47uc=",
+  "goModSum": "h1:50mH7Rn9SOHTyAWKZlIxcaRaP+zwH8DzZWORQEW65AE=",
+  "sourceZIP_SHA256": "57a1cb18f2a91f7a00be94648dbb77d1539e59e303433f2946afdd6707388637",
+  "compiler": "go1.27.4",
+  "originalSHA256": {
+    "go.mod": "9e8610aaccda13a0323db53ebd0695c0e131e7e1b52d8bd917a48bce38c1316c",
+    "go.sum": "160625c0047c0bfae384883d898cba4f6cd544bc6a44f8d7d9fd5e47fe90e7f3"
+  },
+  "effectiveSHA256": {
+    "go.mod": "d7946b8c0939bac86d7ce2165adc6dd3bab584235dbe1200c82fd061858b8ed9",
+    "go.sum": "446be8d43cc09d9225b4c49b8cf77e5b4cf2267523e6b8b4c892e65987cf7b11"
+  },
+  "noticeSHA256": {
+    "LICENSE": "142b957651baf401646dd7f3d855cb7c4f6f0921d645faa27e7cb540bc33cf4c",
+    "README.md": "60c539cfab196b4b39768781ee871f07b34aadcada2f4bef42393810e3dbfb92",
+    "CHANGELOG.md": "41ddbbc2f2d7aea8781e13536a4db156ba124dcab1f5d3ce367490072a3a5372"
+  }
+}

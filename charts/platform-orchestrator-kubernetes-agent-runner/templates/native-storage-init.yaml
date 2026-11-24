@@ -1,0 +1,91 @@
+{{- if and (eq .Values.executionMode "native") .Values.native.initialization.enabled -}}
+{{- if ne (int .Values.native.replicas) 0 -}}{{- fail "Native initialization requires native.replicas=0 and an independently stopped cohort" -}}{{- end -}}
+{{- $config := required "native.initialization.configExistingSecret is required" .Values.native.initialization.configExistingSecret -}}
+{{- $private := required "native.initialization.privateFilesExistingSecret is required" .Values.native.initialization.privateFilesExistingSecret -}}
+{{- if eq $config .Values.native.configExistingSecret -}}{{- fail "Native initialization config Secret must differ from the runtime config Secret" -}}{{- end -}}
+{{- if eq $private .Values.native.privateFilesExistingSecret -}}{{- fail "Native initialization private-files Secret must differ from the runtime private-files Secret" -}}{{- end -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "platform-orchestrator-kubernetes-agent-runner.fullname" . | trunc 51 | trimSuffix "-" }}-native-init
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: native-storage-init
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: native-storage-init
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      serviceAccountName: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: private-scratch
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args: ["mkdir -p /work/native /work/home; chmod 0700 /work/native /work/home"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      containers:
+        - name: storage-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/runner/runner"]
+          args: ["rollout-storage-init"]
+          env:
+            - {name: ROLLOUT_CONFIG_FILE, value: /run/stellwerk/native/config/rollout.json}
+            - {name: HOME, value: /work/home}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /run/stellwerk/native/config, readOnly: true}
+            - {name: private, mountPath: /run/stellwerk/native/private, readOnly: true}
+            - {name: work, mountPath: /work}
+            - {name: tmp, mountPath: /tmp}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ $config }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.native.configKey | quote }}, path: rollout.json}
+        - name: private
+          secret:
+            secretName: {{ $private }}
+            defaultMode: 0440
+        - {name: work, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

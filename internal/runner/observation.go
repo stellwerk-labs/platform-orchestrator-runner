@@ -15,6 +15,7 @@ import (
 	"time"
 
 	api "github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/processgroup"
 )
 
 const maxObservationPlanBytes = 32 << 20
@@ -48,6 +49,7 @@ func (r *baseRunner) Observe(ctx context.Context) (result *api.ObservationResult
 		flags = append(flags, "-consolidate-errors")
 	}
 	initArgs := append([]string{"-chdir=" + r.folder, "init", "-input=false", "-no-color", "-json", "-compact-warnings"}, flags...)
+	initArgs = append(initArgs, r.localInitArgs...)
 	if _, err := r.observationCommand(ctx, 0, initArgs...); err != nil {
 		return nil, errors.New("observation initialization failed")
 	}
@@ -74,11 +76,14 @@ func (r *baseRunner) Observe(ctx context.Context) (result *api.ObservationResult
 
 // Raw diagnostics and process errors must never cross the observation boundary.
 func (r *baseRunner) observationCommand(ctx context.Context, limit int, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, r.binaryPath, args...)
+	if err := r.validateNativeKubernetesEnvironment(); err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(r.binaryPath, args...)
 	cmd.WaitDelay = 2 * time.Second
 	for _, env := range infrastructureEnvironment() {
 		key, _, _ := strings.Cut(env, "=")
-		if strings.HasPrefix(key, "TF_CLI_ARGS") || strings.HasPrefix(key, "TF_LOG") || strings.HasPrefix(key, "TOFU_LOG") {
+		if strings.HasPrefix(key, "TF_CLI_ARGS") || strings.HasPrefix(key, "TF_LOG") || strings.HasPrefix(key, "TOFU_LOG") || key == "TF_DATA_DIR" || key == "TF_WORKSPACE" {
 			continue
 		}
 		cmd.Env = append(cmd.Env, env)
@@ -91,7 +96,7 @@ func (r *baseRunner) observationCommand(ctx context.Context, limit int, args ...
 	} else {
 		cmd.Stdout = io.Discard
 	}
-	if err := cmd.Run(); err != nil || ctx.Err() != nil || out.exceeded {
+	if err := processgroup.Run(ctx, cmd); err != nil || ctx.Err() != nil || out.exceeded {
 		return nil, errors.New("observation command failed")
 	}
 	return out.buffer.Bytes(), nil
@@ -113,8 +118,10 @@ func (b *boundedObservationBuffer) Write(p []byte) (int, error) {
 }
 
 type observationPlanChange struct {
-	Type   string `json:"type"`
-	Change *struct {
+	Address string `json:"address"`
+	Deposed string `json:"deposed"`
+	Type    string `json:"type"`
+	Change  *struct {
 		Actions   []string        `json:"actions"`
 		Importing json.RawMessage `json:"importing"`
 	} `json:"change"`
@@ -172,11 +179,12 @@ func parseObservationPlan(data []byte, tool string) (*api.ObservationResult, err
 		}
 	}
 	result := &api.ObservationResult{SchemaVersion: "1", Complete: true, Tool: api.ObservationResultTool(tool), ToolVersion: plan.Version, ObservedChanges: []api.ObservationChange{}, ProposedChanges: []api.ObservationChange{}}
+	resources := map[[3]string]string{}
 	var err error
-	if result.ObservedChanges, err = sanitizeObservationChanges(plan.Drift, "observed"); err != nil {
+	if result.ObservedChanges, err = sanitizeObservationChanges(plan.Drift, "observed", resources); err != nil {
 		return nil, invalid
 	}
-	if result.ProposedChanges, err = sanitizeObservationChanges(plan.Changes, "proposed"); err != nil {
+	if result.ProposedChanges, err = sanitizeObservationChanges(plan.Changes, "proposed", resources); err != nil {
 		return nil, invalid
 	}
 	if len(plan.Outputs) > 1000000 {
@@ -195,11 +203,12 @@ func parseObservationPlan(data []byte, tool string) (*api.ObservationResult, err
 
 func jsonObject(data json.RawMessage) bool { return len(data) > 1 && data[0] == '{' }
 
-func sanitizeObservationChanges(changes []observationPlanChange, prefix string) ([]api.ObservationChange, error) {
+func sanitizeObservationChanges(changes []observationPlanChange, prefix string, resources map[[3]string]string) ([]api.ObservationChange, error) {
 	if len(changes) > maxObservationChanges {
 		return nil, errors.New("too many observation changes")
 	}
 	result := make([]api.ObservationChange, 0, len(changes))
+	seen := map[string]bool{}
 	for _, change := range changes {
 		if !observationResourceType.MatchString(change.Type) || change.Change == nil || !validObservationActions(change.Change.Actions) || (len(change.Change.Importing) > 0 && string(change.Change.Importing) != "null") {
 			return nil, errors.New("unsupported observation change")
@@ -211,9 +220,28 @@ func sanitizeObservationChanges(changes []observationPlanChange, prefix string) 
 		for i, action := range change.Change.Actions {
 			actions[i] = api.ObservationChangeActions(action)
 		}
-		result = append(result, api.ObservationChange{Id: fmt.Sprintf("%s_%d", prefix, len(result)+1), ResourceType: change.Type, Actions: actions})
+		id := observationChangeID(change, prefix, len(result)+1, resources)
+		if seen[id] {
+			return nil, errors.New("duplicate observation resource")
+		}
+		seen[id] = true
+		result = append(result, api.ObservationChange{Id: id, ResourceType: change.Type, Actions: actions})
 	}
 	return result, nil
+}
+
+// Only result-local ordinals leave this process; addresses and deposed keys stay private.
+func observationChangeID(change observationPlanChange, prefix string, ordinal int, resources map[[3]string]string) string {
+	if change.Address == "" {
+		return fmt.Sprintf("%s_%d", prefix, ordinal)
+	}
+	key := [3]string{change.Type, change.Address, change.Deposed}
+	if id, found := resources[key]; found {
+		return id
+	}
+	id := fmt.Sprintf("resource_%d", len(resources)+1)
+	resources[key] = id
+	return id
 }
 
 func validObservationActions(actions []string) bool {

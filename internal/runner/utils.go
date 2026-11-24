@@ -12,12 +12,17 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/processgroup"
 )
 
 func runCmd(ctx context.Context, command string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, command, args...)
+	cmd := exec.Command(command, args...)
 	cmd.Env = infrastructureEnvironment()
-	if stdout, err := cmd.CombinedOutput(); err != nil {
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	err := processgroup.Run(ctx, cmd)
+	stdout := output.Bytes()
+	if err != nil {
 		return string(stdout), errors.Wrapf(err, "%s", string(stdout))
 	} else {
 		return string(stdout), nil

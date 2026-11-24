@@ -11,14 +11,17 @@ import (
 	"github.com/go-playground/validator"
 	"github.com/google/uuid"
 	"github.com/sethvargo/go-envconfig"
+	"github.com/stellwerk-labs/golib/hmessaging"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/gatewayapi"
 )
 
 type RunnerMode string
 
 const (
-	PlanOnly RunnerMode = "plan_only"
-	Destroy  RunnerMode = "destroy"
-	Deploy   RunnerMode = "deploy"
+	PlanOnly      RunnerMode = "plan_only"
+	Destroy       RunnerMode = "destroy"
+	Deploy        RunnerMode = "deploy"
+	ApplyRetained RunnerMode = "apply_retained"
 )
 
 const ObservationProtocolV1 = "environment-observation/v1"
@@ -58,6 +61,10 @@ type StandardModeConfiguration struct {
 	DeploymentID          string         `env:"DEPLOYMENT_ID,required"`
 	DeploymentEnvUUID     string         `env:"DEPLOYMENT_ENV_UUID"`
 	Mode                  RunnerMode     `env:"MODE,required"`
+	RetainedPlansEnabled  bool           `env:"STELLWERK_RETAINED_PLANS_ENABLED,default=false"`
+	RetainPlan            bool           `env:"STELLWERK_RETAIN_PLAN_V1,default=false"`
+	RetainedBinding       string         `env:"STELLWERK_RETAINED_PLAN_BINDING"`
+	RetainedSHA256        string         `env:"STELLWERK_RETAINED_PLAN_SHA256"`
 	ObservationProtocol   string         `env:"OBSERVATION_PROTOCOL"`
 	EncryptingKey         string         `env:"ENCRYPTING_KEY"`
 	MetadataKey           string         `env:"METADATA_KEY, default=platform_orchestrator_metadata"`
@@ -92,19 +99,23 @@ type OutboxModeConfiguration struct {
 }
 
 type GatewayModeConfiguration struct {
-	LogLevel             string        `env:"LOG_LEVEL,default=info"`
-	Port                 int           `env:"PORT,default=8080"`
-	BasePath             string        `env:"RUNNER_GATEWAY_BASE_PATH,default=/runner-gateway"`
-	ReceiptKey           string        `env:"RUNNER_GATEWAY_RECEIPT_KEY,required"`
-	RunnerTokenSalt      string        `env:"RUNNER_TOKEN_SALT,required"`
-	ControlPlaneURL      string        `env:"CONTROL_PLANE_URL"`
-	StaticOrganizationID string        `env:"RUNNER_GATEWAY_STATIC_ORG_ID"`
-	StaticRunnerID       string        `env:"RUNNER_GATEWAY_STATIC_RUNNER_ID"`
-	StaticPublicKeyFile  string        `env:"RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE"`
-	PublicKeyCacheTTL    time.Duration `env:"RUNNER_GATEWAY_PUBLIC_KEY_CACHE_TTL,default=1m"`
-	FetchWait            time.Duration `env:"RUNNER_GATEWAY_FETCH_WAIT,default=25s"`
-	MaxLogBytes          int64         `env:"RUNNER_GATEWAY_MAX_LOG_BYTES,default=16777216"`
-	NATS                 NATSConfiguration
+	DeploymentAuthorityDPURL string        `env:"RUNNER_GATEWAY_DEPLOYMENT_AUTHORITY_DP_URL"`
+	RetainedPlansEnabled     bool          `env:"STELLWERK_RETAINED_PLANS_ENABLED,default=false"`
+	RetainedPlanDPURL        string        `env:"STELLWERK_RETAINED_PLAN_DP_URL"`
+	LogLevel                 string        `env:"LOG_LEVEL,default=info"`
+	Port                     int           `env:"PORT,default=8080"`
+	BasePath                 string        `env:"RUNNER_GATEWAY_BASE_PATH,default=/runner-gateway"`
+	ReceiptKey               string        `env:"RUNNER_GATEWAY_RECEIPT_KEY,required"`
+	RunnerTokenSalt          string        `env:"RUNNER_TOKEN_SALT,required"`
+	ControlPlaneURL          string        `env:"CONTROL_PLANE_URL"`
+	StaticOrganizationID     string        `env:"RUNNER_GATEWAY_STATIC_ORG_ID"`
+	StaticRunnerID           string        `env:"RUNNER_GATEWAY_STATIC_RUNNER_ID"`
+	StaticRunnerUUID         string        `env:"RUNNER_GATEWAY_STATIC_RUNNER_UUID"`
+	StaticPublicKeyFile      string        `env:"RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE"`
+	PublicKeyCacheTTL        time.Duration `env:"RUNNER_GATEWAY_PUBLIC_KEY_CACHE_TTL,default=1m"`
+	FetchWait                time.Duration `env:"RUNNER_GATEWAY_FETCH_WAIT,default=25s"`
+	MaxLogBytes              int64         `env:"RUNNER_GATEWAY_MAX_LOG_BYTES,default=16777216"`
+	NATS                     NATSConfiguration
 }
 
 type NATSConfiguration struct {
@@ -211,12 +222,18 @@ func GetGatewayModeConfiguration() (*GatewayModeConfiguration, error) {
 		return nil, errors.New("NATS_URL is required")
 	}
 	usesControlPlane := conf.ControlPlaneURL != ""
-	usesStaticKey := conf.StaticOrganizationID != "" || conf.StaticRunnerID != "" || conf.StaticPublicKeyFile != ""
+	usesStaticKey := conf.StaticOrganizationID != "" || conf.StaticRunnerID != "" || conf.StaticPublicKeyFile != "" || conf.StaticRunnerUUID != ""
 	if usesControlPlane == usesStaticKey {
 		return nil, errors.New("configure exactly one gateway public key source: CONTROL_PLANE_URL or all static runner key settings")
 	}
 	if usesStaticKey && (conf.StaticOrganizationID == "" || conf.StaticRunnerID == "" || conf.StaticPublicKeyFile == "") {
 		return nil, errors.New("static gateway authentication requires organization ID, runner ID, and public key file")
+	}
+	if err := conf.ValidateDirectAccess(); err != nil {
+		return nil, err
+	}
+	if conf.RetainedPlansEnabled && conf.RetainedPlanDPURL == "" {
+		return nil, errors.New("STELLWERK_RETAINED_PLAN_DP_URL is required")
 	}
 	if conf.Port < 1 || conf.Port > 65535 {
 		return nil, errors.New("PORT must be between 1 and 65535")
@@ -244,7 +261,7 @@ func GetOutboxModeConfiguration() (*OutboxModeConfiguration, error) {
 
 func validateMode(mode RunnerMode) error {
 	switch mode {
-	case Deploy, Destroy, PlanOnly:
+	case Deploy, Destroy, PlanOnly, ApplyRetained:
 		return nil
 	default:
 		return errors.Errorf("mode %s is not supported", mode)
@@ -258,4 +275,17 @@ func validateIaCBackend(backend IaCBackendType) error {
 	default:
 		return errors.Errorf("IAC_BACKEND %q is not supported, must be %q or %q", backend, BackendOpenTofu, BackendTerraform)
 	}
+}
+
+// ValidateDirectAccess also protects direct Gateway startup before connecting to NATS.
+func (conf *GatewayModeConfiguration) ValidateDirectAccess() error {
+	if conf.DeploymentAuthorityDPURL != "" && conf.ControlPlaneURL == "" {
+		return errors.New("deployment authority URL requires the connected control-plane key source")
+	}
+	if conf.StaticRunnerUUID != "" {
+		if _, err := hmessaging.NativeRunnerToken(conf.StaticRunnerUUID); err != nil {
+			return errors.New("static native runner UUID is invalid")
+		}
+	}
+	return gatewayapi.ValidateDirectDeploymentAccess(conf.DeploymentAuthorityDPURL, conf.StaticRunnerUUID != "", conf.RetainedPlansEnabled)
 }

@@ -25,13 +25,29 @@ type baseRunner struct {
 	folder                string
 	binaryPath            string
 	tool                  string
+	localInitArgs         []string
+	nativeKubernetesProxy *string
 	observationOnly       bool
+	retainedProviders     map[string]retainedProviderFile
+	localProviders        bool
 	costEstimationEnabled bool
 	infracostAPIKey       string
 	costBinary            string
 	costEndpoint          string
 	recipient             age.Recipient
 	bundleLoader          func(context.Context) ([]byte, error)
+	keyLoader             func(context.Context) (string, error)
+	command               func(context.Context, string, ...string) (string, error)
+}
+
+func (r *baseRunner) runCommand(ctx context.Context, args ...string) (string, error) {
+	if err := r.validateNativeKubernetesEnvironment(); err != nil {
+		return "", err
+	}
+	if r.command != nil {
+		return r.command(ctx, r.binaryPath, args...)
+	}
+	return runCmd(ctx, r.binaryPath, args...)
 }
 
 func (r *baseRunner) planFile() string {
@@ -55,7 +71,7 @@ func (r *baseRunner) Version(ctx context.Context) (string, error) {
 	if r.observationOnly {
 		return "", errors.New("observation requires the safe observation executor")
 	}
-	out, err := runCmd(ctx, r.binaryPath, "version")
+	out, err := r.runCommand(ctx, "version")
 	if err != nil {
 		return out, errors.Wrap(err, fmt.Sprintf("failed to run `%s version`", r.binaryPath))
 	}
@@ -67,7 +83,7 @@ func (r *baseRunner) OutputMetadata(ctx context.Context, metadata string) (strin
 	if r.observationOnly {
 		return "", errors.New("observation outputs are unavailable")
 	}
-	out, err := runCmd(ctx, r.binaryPath, "-chdir="+r.folder, "output", "-json", "-no-color", metadata)
+	out, err := r.runCommand(ctx, "-chdir="+r.folder, "output", "-json", "-no-color", metadata)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("output", err); err2 == nil && parsedErr != nil {
 			return out, parsedErr
@@ -91,7 +107,8 @@ func (r *baseRunner) init(ctx context.Context, extraFlags ...string) (string, er
 		return "", errors.New("observation requires the safe observation executor")
 	}
 	args := append([]string{"-chdir=" + r.folder, "init", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
-	out, err := runCmd(ctx, r.binaryPath, args...)
+	args = append(args, r.localInitArgs...)
+	out, err := r.runCommand(ctx, args...)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("init", err); err2 == nil && parsedErr != nil {
 			return out, parsedErr
@@ -108,8 +125,13 @@ func (r *baseRunner) plan(ctx context.Context, extraFlags ...string) (string, ma
 	if r.observationOnly {
 		return "", nil, nil, errors.New("observation requires the safe observation executor")
 	}
+	if r.localProviders {
+		if err := r.freezePlanProviders(); err != nil {
+			return fmt.Sprintf("Retained provider preparation failed: %v\n", err), nil, nil, err
+		}
+	}
 	args := append([]string{"-chdir=" + r.folder, "plan", "-no-color", "-json", "-compact-warnings", "-out", r.planFile()}, extraFlags...)
-	out, err := runCmd(ctx, r.binaryPath, args...)
+	out, err := r.runCommand(ctx, args...)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("plan", err); err2 == nil && parsedErr != nil {
 			return out, nil, nil, parsedErr
@@ -117,7 +139,7 @@ func (r *baseRunner) plan(ctx context.Context, extraFlags ...string) (string, ma
 		return out, nil, nil, errors.Wrap(err, fmt.Sprintf("failed to run `%s plan`", r.binaryPath))
 	}
 
-	planOut, err := runCmd(ctx, r.binaryPath, "-chdir="+r.folder, "show", "-no-color", "-json", r.planFile())
+	planOut, err := r.runCommand(ctx, "-chdir="+r.folder, "show", "-no-color", "-json", r.planFile())
 	if err != nil {
 		return out, nil, nil, errors.Wrap(err, fmt.Sprintf("failed to extract `%s plan`", r.binaryPath))
 	}
@@ -140,7 +162,7 @@ func (r *baseRunner) apply(ctx context.Context, extraFlags ...string) (string, *
 	}
 	args := append([]string{"-chdir=" + r.folder, "apply", "-auto-approve", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
 	args = append(args, r.planFile())
-	out, err := runCmd(ctx, r.binaryPath, args...)
+	out, err := r.runCommand(ctx, args...)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("apply", err); err2 == nil && parsedErr != nil {
 			return out, nil, parsedErr
@@ -159,7 +181,7 @@ func (r *baseRunner) destroy(ctx context.Context, extraFlags ...string) (string,
 		return "", nil, errors.New("observation cannot destroy")
 	}
 	args := append([]string{"-chdir=" + r.folder, "destroy", "-auto-approve", "-no-color", "-json", "-compact-warnings"}, extraFlags...)
-	out, err := runCmd(ctx, r.binaryPath, args...)
+	out, err := r.runCommand(ctx, args...)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("destroy", err); err2 == nil && parsedErr != nil {
 			return out, nil, parsedErr
@@ -178,7 +200,7 @@ func (r *baseRunner) output(ctx context.Context, extraFlags ...string) (map[stri
 		return nil, errors.New("observation outputs are unavailable")
 	}
 	args := append([]string{"-chdir=" + r.folder, "output", "-json", "-no-color"}, extraFlags...)
-	out, err := runCmd(ctx, r.binaryPath, args...)
+	out, err := r.runCommand(ctx, args...)
 	if err != nil {
 		if parsedErr, err2 := r.parseError("output", err); err2 == nil && parsedErr != nil {
 			return nil, parsedErr

@@ -90,6 +90,8 @@ output "sensitive" {
 				require.NotEmpty(t, result.ProposedChanges)
 				require.Equal(t, "delete", string(result.ObservedChanges[0].Actions[0]))
 				require.Equal(t, "create", string(result.ProposedChanges[0].Actions[0]))
+				require.Equal(t, result.ObservedChanges[0].Id, result.ProposedChanges[0].Id)
+				require.Regexp(t, `^resource_[1-9][0-9]*$`, result.ObservedChanges[0].Id)
 				encoded, err := json.Marshal(result)
 				require.NoError(t, err)
 				for _, secret := range []string{"SECRET_ADDRESS_CANARY", "SECRET_CONTENT_CANARY", "SECRET_OUTPUT_CANARY", "EXTERNAL_SECRET_CANARY", file, "address", "before", "after"} {

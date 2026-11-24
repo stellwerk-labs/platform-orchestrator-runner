@@ -1,0 +1,131 @@
+{{- if eq .Values.executionMode "native" -}}
+{{- if .Values.outbox.enabled -}}{{- fail "outbox.enabled is a remote-mode feature" -}}{{- end -}}
+{{- if and (eq .Values.gateway.mode "airgap") (not .Values.airgap.runnerUuid) -}}{{- fail "Native airgap mode requires airgap.runnerUuid" -}}{{- end -}}
+{{- if and (eq .Values.gateway.mode "airgap") (not (and .Values.platformOrchestrator.orgId .Values.platformOrchestrator.runnerId)) -}}{{- fail "Native airgap mode requires platformOrchestrator.orgId and platformOrchestrator.runnerId" -}}{{- end -}}
+{{- $config := required "native.configExistingSecret is required" .Values.native.configExistingSecret -}}
+{{- $private := required "native.privateFilesExistingSecret is required" .Values.native.privateFilesExistingSecret -}}
+{{- $name := printf "%s-native" (include "platform-orchestrator-kubernetes-agent-runner.fullname" . | trunc 56 | trimSuffix "-") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: native-worker
+spec:
+  clusterIP: None
+  selector:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: native-worker
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "platform-orchestrator-kubernetes-agent-runner.namespace" . }}
+  labels:
+    {{- include "platform-orchestrator-kubernetes-agent-runner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: native-worker
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ .Values.native.replicas }}
+  updateStrategy:
+    type: OnDelete
+  selector:
+    matchLabels:
+      {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: native-worker
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "platform-orchestrator-kubernetes-agent-runner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: native-worker
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: {{ include "platform-orchestrator-kubernetes-agent-runner.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.native.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: private-scratch
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args: ["mkdir -p /work/native /work/home; chmod 0700 /work/native /work/home"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      containers:
+        - name: native-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/runner/runner"]
+          args: ["rollout"]
+          env:
+            - name: ROLLOUT_CONFIG_FILE
+              value: /run/stellwerk/native/config/rollout.json
+            - name: ROLLOUT_WORKER_ID
+              valueFrom:
+                fieldRef: {fieldPath: metadata.name}
+            - {name: HOME, value: /work/home}
+          readinessProbe:
+            exec:
+              command: ["/opt/runner/runner", "--timeout=3s", "rollout-ready"]
+            timeoutSeconds: 5
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /run/stellwerk/native/config, readOnly: true}
+            - {name: private, mountPath: /run/stellwerk/native/private, readOnly: true}
+            - {name: work, mountPath: /work}
+            - {name: tmp, mountPath: /tmp}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ $config }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.native.configKey | quote }}, path: rollout.json}
+        - name: private
+          secret:
+            secretName: {{ $private }}
+            defaultMode: 0440
+        - {name: work, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

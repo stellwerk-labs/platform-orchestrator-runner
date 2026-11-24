@@ -26,6 +26,15 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 		t.Run(binary, func(t *testing.T) {
 			binaryPath, err := exec.LookPath(binary)
 			require.NoError(t, err, "install %s before running the artifact integration suite", binary)
+			if binary == "tofu" {
+				output, err := exec.CommandContext(t.Context(), binaryPath, "version", "-json").CombinedOutput()
+				require.NoError(t, err, "%s", output)
+				var version struct {
+					TerraformVersion string `json:"terraform_version"`
+				}
+				require.NoError(t, json.Unmarshal(output, &version))
+				require.Equal(t, "1.13.9-stellwerk.remediation.20261123.1", version.TerraformVersion)
+			}
 			artifact := t.TempDir()
 			git := func(args ...string) string {
 				command := exec.CommandContext(t.Context(), "git", args...)
@@ -112,14 +121,67 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 				}
 				deploy(t, legacyRevision, "", "", "legacy", false)
 				if useLegacyEngine {
-					require.Equal(t, "1.10.0", readState(t).TerraformVersion, "the upgrade must start from state written by the previously shipped engine")
+					require.Equal(t, "1.13.2", readState(t).TerraformVersion, "the upgrade must start from state written by the previously shipped engine")
 				}
 			})
+			if useLegacyEngine {
+				t.Run("previous engine saved plan requires replan without effects", func(t *testing.T) {
+					work := t.TempDir()
+					legacyPath, err := exec.LookPath(legacyBinary)
+					require.NoError(t, err)
+					run := func(path string, args ...string) ([]byte, error) {
+						command := exec.CommandContext(t.Context(), path, args...)
+						command.Dir = work
+						return command.CombinedOutput()
+					}
+					configuration := filepath.Join(work, "main.tf")
+					source := "resource \"terraform_data\" \"value\" { input = \"before\" }\noutput \"value\" { value = terraform_data.value.output }\n"
+					require.NoError(t, os.WriteFile(configuration, []byte(source), 0o600))
+					output, err := run(legacyPath, "init", "-input=false", "-no-color")
+					require.NoError(t, err, "%s", output)
+					output, err = run(legacyPath, "apply", "-auto-approve", "-input=false", "-no-color")
+					require.NoError(t, err, "%s", output)
+					statePath := filepath.Join(work, "terraform.tfstate")
+					before, err := os.ReadFile(statePath)
+					require.NoError(t, err)
+					var previous stateSnapshot
+					require.NoError(t, json.Unmarshal(before, &previous))
+					require.Equal(t, "1.13.2", previous.TerraformVersion)
+					require.NotEmpty(t, previous.Lineage)
+					require.NoError(t, os.WriteFile(configuration, []byte(strings.ReplaceAll(source, "before", "after")), 0o600))
+					output, err = run(legacyPath, "plan", "-input=false", "-no-color", "-out=previous.tfplan")
+					require.NoError(t, err, "%s", output)
+					output, err = run(binaryPath, "apply", "-input=false", "-no-color", "previous.tfplan")
+					require.Error(t, err)
+					require.Contains(t, strings.Join(strings.Fields(string(output)), " "), "plan file was created by OpenTofu or Terraform 1.13.2")
+					require.Contains(t, string(output), "1.13.9-stellwerk.remediation.20261123.1")
+					after, err := os.ReadFile(statePath)
+					require.NoError(t, err)
+					require.Equal(t, before, after, "refusing the old plan must leave state bytes unchanged")
+					output, err = run(binaryPath, "output", "-json", "value")
+					require.NoError(t, err, "%s", output)
+					require.JSONEq(t, `"before"`, string(output))
+					output, err = run(binaryPath, "plan", "-input=false", "-no-color", "-out=current.tfplan")
+					require.NoError(t, err, "%s", output)
+					output, err = run(binaryPath, "apply", "-input=false", "-no-color", "current.tfplan")
+					require.NoError(t, err, "%s", output)
+					after, err = os.ReadFile(statePath)
+					require.NoError(t, err)
+					var current stateSnapshot
+					require.NoError(t, json.Unmarshal(after, &current))
+					require.Equal(t, "1.13.9", current.TerraformVersion)
+					require.Equal(t, previous.Lineage, current.Lineage)
+					require.Greater(t, current.Serial, previous.Serial)
+					output, err = run(binaryPath, "output", "-json", "value")
+					require.NoError(t, err, "%s", output)
+					require.JSONEq(t, `"after"`, string(output))
+				})
+			}
 			t.Run("migrated v0 carry-forward", func(t *testing.T) { deploy(t, legacyRevision, "v0", "", "legacy", true) })
 			t.Run("first managed v1", func(t *testing.T) {
 				deploy(t, managedRevision, "v1", "1.0.0", "managed", true)
 				if useLegacyEngine {
-					require.Equal(t, "1.13.2", readState(t).TerraformVersion, "the patched engine must write the updated state")
+					require.Equal(t, "1.13.9", readState(t).TerraformVersion, "the patched engine must write the updated state")
 				}
 			})
 			t.Run("managed external artifact without digest", func(t *testing.T) { deploy(t, managedRevision, "managed", "1.1.0", "managed", true) })

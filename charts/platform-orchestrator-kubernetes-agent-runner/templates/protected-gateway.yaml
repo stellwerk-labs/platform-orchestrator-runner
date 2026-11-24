@@ -35,6 +35,9 @@ spec:
             - {name: NATS_URL, value: {{ $natsURL | quote }}}
             - {name: RUNNER_GATEWAY_STATIC_ORG_ID, value: {{ .Values.platformOrchestrator.orgId | quote }}}
             - {name: RUNNER_GATEWAY_STATIC_RUNNER_ID, value: {{ .Values.platformOrchestrator.runnerId | quote }}}
+            {{- if .Values.airgap.runnerUuid }}
+            - {name: RUNNER_GATEWAY_STATIC_RUNNER_UUID, value: {{ .Values.airgap.runnerUuid | quote }}}
+            {{- end }}
             - {name: RUNNER_GATEWAY_STATIC_PUBLIC_KEY_FILE, value: /etc/protected-gateway/public-key.pem}
             - name: RUNNER_TOKEN_SALT
               valueFrom:

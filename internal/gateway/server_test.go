@@ -98,7 +98,7 @@ func testServer(t *testing.T, backend *fakeBackend, now time.Time) (*Server, []b
 func authorizedRequest(t *testing.T, method, target string, body io.Reader, privateKey []byte, now time.Time) *http.Request {
 	t.Helper()
 	request := httptest.NewRequest(method, target, body)
-	token, err := gatewayapi.SignAgentToken(privateKey, "org", "runner", now)
+	token, err := gatewayapi.SignAgentToken(privateKey, "org", "runner", "", now)
 	require.NoError(t, err)
 	request.Header.Set("Authorization", "Bearer "+token)
 	return request
@@ -192,4 +192,39 @@ func TestGatewayEnforcesEncryptedLogLimitBeforePublishingReference(t *testing.T)
 	require.Equal(t, http.StatusRequestEntityTooLarge, response.Code)
 	require.Nil(t, backend.log, "an oversized object must be removed")
 	require.Empty(t, backend.published, "an oversized object must not be announced")
+}
+
+func TestRetainedKeyProxyRequiresFeatureAndDeploymentToken(t *testing.T) {
+	const deploymentID = "69aa008a-a60c-4542-8f83-fdc5bb0ae599"
+	token := deploymentToken("salt", "org", deploymentID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/orgs/org/runners/runner/deployments/"+deploymentID+"/retained-plan-key", r.URL.Path)
+		require.Equal(t, token, r.Header.Get(gatewayapi.DeploymentTokenHeader))
+		_, _ = w.Write([]byte(`{"identity":"fixture-key"}`))
+	}))
+	defer upstream.Close()
+	s, _ := testServer(t, &fakeBackend{}, time.Now())
+	target := "/runner-gateway/v1/orgs/org/runners/runner/deployments/" + deploymentID + "/retained-plan-key"
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	request.Header.Set(gatewayapi.DeploymentTokenHeader, token)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusNotFound, response.Code)
+	s.retainedPlansEnabled = true
+	s.retainedPlanDPURL = upstream.URL
+	request = httptest.NewRequest(http.MethodGet, target, nil)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	request = httptest.NewRequest(http.MethodGet, target, nil)
+	request.Header.Set(gatewayapi.DeploymentTokenHeader, token)
+	response = httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.JSONEq(t, `{"identity":"fixture-key"}`, response.Body.String())
+}
+
+func (b *fakeBackend) GetLog(context.Context, string) (io.ReadCloser, error) {
+	return nil, errors.New("log unavailable")
 }

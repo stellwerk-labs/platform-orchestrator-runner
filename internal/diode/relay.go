@@ -21,6 +21,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/stellwerk-labs/golib/hmessaging"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/nativelogs"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/natstransport"
 )
 
@@ -276,6 +277,9 @@ func maxFrameBytes(maxAttachmentBytes int64) int64 {
 }
 
 func validateAttachmentInvariant(expected string, message hmessaging.Message, attachment *Attachment) error {
+	if err := validateNativeLogAttachment(expected, message, attachment); err != nil {
+		return err
+	}
 	if expected == "" {
 		return nil
 	}
@@ -319,7 +323,11 @@ func loadAttachment(connection *nats.Conn, config ExportConfig, message hmessagi
 	if int64(len(data)) > config.MaxAttachmentBytes {
 		return nil, fmt.Errorf("object attachment %s/%s exceeds %d bytes", bucket, key, config.MaxAttachmentBytes)
 	}
-	return &Attachment{Bucket: bucket, Key: key, Data: data, PayloadSHA256: payloadHash(data)}, nil
+	attachment := &Attachment{Bucket: bucket, Key: key, Data: data, PayloadSHA256: payloadHash(data)}
+	if err := validateNativeLogAttachment(config.AttachObject, message, attachment); err != nil {
+		return nil, err
+	}
+	return attachment, nil
 }
 
 func attachmentReference(config ExportConfig, message hmessaging.Message) (string, string, bool, error) {
@@ -348,6 +356,13 @@ func attachmentReference(config ExportConfig, message hmessaging.Message) (strin
 		if event.Type != "log-object-ready" {
 			return "", "", false, nil
 		}
+		if nativeLogFrame(message, nil) {
+			d, err := nativelogs.VerifyReadyMessage(message)
+			if err != nil {
+				return "", "", false, err
+			}
+			return nativelogs.Bucket, d.ObjectKey, true, nil
+		}
 		var reference struct {
 			Bucket string `json:"bucket"`
 			Key    string `json:"key"`
@@ -371,6 +386,9 @@ func storeAttachment(connection *nats.Conn, attachment Attachment) error {
 	}
 	if attachment.PayloadSHA256 != payloadHash(attachment.Data) {
 		return errors.New("attachment payload checksum mismatch")
+	}
+	if strings.Contains(attachment.Key, "/native/") {
+		return storeNativeAttachment(connection, attachment)
 	}
 	js, err := connection.JetStream()
 	if err != nil {

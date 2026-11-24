@@ -12,6 +12,73 @@ env:
   DOCKER_BUILDKIT: "1"
 
 jobs:
+  native-kubernetes-backend:
+    name: Native Kubernetes state backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GOENV: 'off'
+      GOTOOLCHAIN: go1.26.11
+      GOWORK: 'off'
+      GOMAXPROCS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.11'
+          cache: true
+      - name: Install checksum-pinned existing backend test tools
+        timeout-minutes: 5
+        run: |
+          set -eu
+          umask 077
+          tools="$RUNNER_TEMP/native-backend-tools"
+          mkdir -p "$tools"
+          curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --max-time 120 \
+            https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64 -o "$tools/kind"
+          echo "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  $tools/kind" | sha256sum -c -
+          chmod 0755 "$tools/kind"
+          curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --max-time 120 \
+            https://releases.hashicorp.com/terraform/1.17.2/terraform_1.17.2_linux_amd64.zip -o "$tools/terraform.zip"
+          echo "e6f16b2f0b137ee5729caa8c4e79a3bae4ee261acd198a1fcfa8584a6296605b  $tools/terraform.zip" | sha256sum -c -
+          unzip -q "$tools/terraform.zip" terraform -d "$tools"
+          rm "$tools/terraform.zip"
+          echo "$tools" >> "$GITHUB_PATH"
+      - name: Install the shipped OpenTofu
+        timeout-minutes: 5
+        run: |
+          set -eu
+          docker buildx build --target tofu-test-export --output "type=local,dest=$RUNNER_TEMP/native-backend-tools" .
+          chmod 0755 "$RUNNER_TEMP/native-backend-tools/tofu"
+          "$RUNNER_TEMP/native-backend-tools/tofu" version
+          terraform version
+      - name: Start an invocation-owned Kubernetes cluster
+        timeout-minutes: 5
+        run: |
+          set -eu
+          umask 077
+          cluster="native-backend-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          config="$RUNNER_TEMP/native-backend-admin.yaml"
+          echo "NATIVE_BACKEND_CLUSTER=$cluster" >> "$GITHUB_ENV"
+          echo "NATIVE_BACKEND_ADMIN_CONFIG=$config" >> "$GITHUB_ENV"
+          kind create cluster --name "$cluster" --kubeconfig "$config" --wait 90s \
+            --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+      - name: Qualify actual Terraform and OpenTofu backend execution
+        timeout-minutes: 5
+        run: |
+          make generate
+          make test-native-kubernetes-backend
+      - name: Remove only the invocation-owned cluster and admin credential
+        if: always()
+        run: |
+          set -eu
+          if [ -n "${NATIVE_BACKEND_CLUSTER:-}" ]; then
+            case "$NATIVE_BACKEND_CLUSTER" in native-backend-*) kind delete cluster --name "$NATIVE_BACKEND_CLUSTER" --kubeconfig "$RUNNER_TEMP/native-backend-admin.yaml";; *) exit 1;; esac
+          fi
+          rm -f "$RUNNER_TEMP/native-backend-admin.yaml"
+
   test-unit:
     runs-on: ubuntu-latest
     steps:
@@ -49,18 +116,63 @@ jobs:
           go test ./scripts/vendorcheck
           sh scripts/check-go-security.sh
 
+      - name: Prepare authenticated OpenTofu notice inputs
+        run: |
+          set -eu
+          umask 077
+          opentofu_work="$(mktemp -d "$RUNNER_TEMP/opentofu-notices.XXXXXX")"
+          sh scripts/prepare-opentofu.sh "$opentofu_work/build"
+          opentofu_go="$(GOTOOLCHAIN=go1.27.4 go env GOROOT)/bin/go"
+          OPENTOFU_GO="$opentofu_go" sh scripts/build-opentofu.sh "$opentofu_work/build/source" "$opentofu_work/tofu-amd64" amd64
+          OPENTOFU_GO="$opentofu_go" sh scripts/build-opentofu.sh "$opentofu_work/build/source" "$opentofu_work/tofu-arm64" arm64
+          printf 'OPENTOFU_BUILD_DIR=%s\nOPENTOFU_GO=%s\nOPENTOFU_BINARY_AMD64=%s\nOPENTOFU_BINARY_ARM64=%s\n' \
+            "$opentofu_work/build" "$opentofu_go" "$opentofu_work/tofu-amd64" "$opentofu_work/tofu-arm64" >> "$GITHUB_ENV"
+
       - name: Qualify complete production notices and fail-closed final copy
         run: |
           sh scripts/install-go-licenses.sh "$RUNNER_TEMP/notice-tools"
           export PATH="$RUNNER_TEMP/notice-tools:$PATH"
           python3 -B scripts/notices_test.py
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install shipped OpenTofu and Infracost for native tests
+        run: |
+          set -eu
+          umask 077
+          test_tools="$(mktemp -d "$RUNNER_TEMP/pipeline-tools.XXXXXX")"
+          docker buildx build --target pipeline-test-export --output "type=local,dest=$test_tools" .
+          test -f "$test_tools/tofu"
+          test -f "$test_tools/infracost"
+          chmod 0755 "$test_tools/tofu" "$test_tools/infracost"
+          "$test_tools/tofu" version
+          "$test_tools/infracost" --version
+          printf '%s\n' "$test_tools" >> "$GITHUB_PATH"
+          printf 'INFRACOST_TEST_BINARY=%s\n' "$test_tools/infracost" >> "$GITHUB_ENV"
+
       - name: Run Go Tests
         run: |
           GOFLAGS=-coverprofile=cover.out make test-unit
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Qualify native pipeline delivery with real Gateway and NATS
+        timeout-minutes: 5
+        run: |
+          docker pull nats@sha256:ddb480f4b97d90f183123e96bbc7c96ab2a126883f7a380531cc208fc8ba9ca7
+          make test-agent-delivery-integration
+
+      - name: Refuse unsupported native NATS custody mutation
+        timeout-minutes: 5
+        run: |
+          docker pull nats@sha256:d402af4147fc7ba334ecc45b1cb14a6f46f32ad6a36873fbd1a6a37ce42452dd
+          make test-unsupported-native-nats
+
+      - name: Qualify shared pipeline queue and worker fencing
+        timeout-minutes: 10
+        run: |
+          docker pull nats@sha256:ddb480f4b97d90f183123e96bbc7c96ab2a126883f7a380531cc208fc8ba9ca7
+          docker pull postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
+          make test-rollout-ha-integration
 
       - name: Check shipped Runner and OpenTofu executables
         run: docker buildx build --no-cache-filter security --target final --build-arg RELEASE_VERSION=v3.3.0 --sbom=true --provenance=mode=max --output "type=oci,dest=$RUNNER_TEMP/runner-final-preflight.tar" .

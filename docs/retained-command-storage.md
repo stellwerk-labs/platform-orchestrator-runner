@@ -1,0 +1,15 @@
+# Retained command storage
+
+The site coordinator encrypts each admitted signed command payload with its existing age identity before persisting it in SQLite. This includes deployment credentials, execution bundles, configuration and manifests. The SHA256 of the original signed payload remains the command replay identity and the input to exact-plan approval subjects. Ordinary and transactional command readers decrypt, validate that digest, and verify the stored ID and site scope before returning the command. Non-secret version/environment/strategy columns support saved-plan freshness queries; startup and command readers verify them against the decrypted command.
+
+Startup checks command storage before launching DBOS recovery. A versioned `rollout_storage` record binds storage to an encrypted identity check. Unsupported versions, damaged ciphertext, conflicting command identity or an unavailable key refuse startup. The coordinator never substitutes plaintext after a failed decrypt.
+
+Existing unversioned storage is migrated transactionally. Every old command must have valid bounded JSON, the matching original payload digest and matching ID/site scope. Existing encrypted artifacts, when present, establish that the supplied identity can still decrypt old data. The command rewrites and storage version commit together; any failure rolls back all rewrites. A new key is never generated when SQLite storage already exists, and an empty identity file is always refused. New identities are privately staged, synced, renamed and directory-synced.
+
+Migration enables SQLite secure deletion and commits an encrypted-but-compaction-pending storage version. Before workflow recovery, it runs `VACUUM` and a successful truncating WAL checkpoint, then marks storage ready. A crash, full disk or concurrent reader that prevents cleanup leaves the pending version for a safe retry; recovery does not launch. Allow space and time for this one-time compaction during upgrade. Existing ready storage does not vacuum on every startup.
+
+This cleans the active SQLite database/free pages and WAL, not historical custody or physical disk remnants. Pre-migration filesystem snapshots, forensic disk copies and existing backups remain credential-bearing data. Retire those copies under the installation's storage policy. Do not share a database dump as a public diagnostic artifact.
+
+Keep `identity.agekey` securely backed up with the matching site data. Full-volume copies containing both the database and its private key remain sensitive. This change does not add key rotation, backup/restore orchestration, hot credential reload, cross-machine coordinator ownership or a public command-export endpoint. Restore and recovery must preserve effect fences and consumed-plan identity; never restart an older snapshot as a second active site.
+
+The new reader accepts migrated old storage. An older executable that expects plaintext command rows is not a supported downgrade path. Preserve an immutable pre-upgrade backup and follow the site's recovery procedure instead of running an older binary against upgraded storage.

@@ -24,6 +24,7 @@ type ClientConfig struct {
 	BaseURL        string
 	OrganizationID string
 	RunnerID       string
+	RunnerUUID     string
 	PrivateKey     []byte
 	CAFile         string
 	ClientCertFile string
@@ -35,12 +36,16 @@ type Client struct {
 	baseURL        string
 	organizationID string
 	runnerID       string
+	runnerUUID     string
 	privateKey     []byte
 	httpClient     *http.Client
 	now            func() time.Time
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
+	if err := validateAgentUUID(config.RunnerID, config.RunnerUUID); err != nil {
+		return nil, err
+	}
 	parsed, err := url.Parse(strings.TrimRight(config.BaseURL, "/"))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return nil, errors.New("runner gateway URL must be an absolute HTTP or HTTPS URL")
@@ -59,7 +64,7 @@ func NewClient(config ClientConfig) (*Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = tlsConfig
 	return &Client{
-		baseURL: parsed.String(), organizationID: config.OrganizationID, runnerID: config.RunnerID,
+		baseURL: parsed.String(), organizationID: config.OrganizationID, runnerID: config.RunnerID, runnerUUID: config.RunnerUUID,
 		privateKey: append([]byte(nil), config.PrivateKey...),
 		httpClient: &http.Client{Transport: transport, Timeout: timeout}, now: time.Now,
 	}, nil
@@ -159,6 +164,11 @@ func (c *Client) PublishEvent(ctx context.Context, event hmessaging.EventEnvelop
 	if err != nil {
 		return err
 	}
+	return c.PublishEventBytes(ctx, contents)
+}
+
+// PublishEventBytes preserves a coordinator's durably frozen envelope.
+func (c *Client) PublishEventBytes(ctx context.Context, contents []byte) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.runnerURL("/events"), bytes.NewReader(contents))
 	if err != nil {
 		return err
@@ -229,7 +239,7 @@ func (c *Client) authorizeAgent(request *http.Request) error {
 	if len(c.privateKey) == 0 {
 		return errors.New("runner private key is required for agent requests")
 	}
-	token, err := SignAgentToken(c.privateKey, c.organizationID, c.runnerID, c.now())
+	token, err := SignAgentToken(c.privateKey, c.organizationID, c.runnerID, c.runnerUUID, c.now())
 	if err != nil {
 		return err
 	}
@@ -250,6 +260,35 @@ func (c *Client) expectStatus(request *http.Request, expected int, operation str
 }
 
 func responseError(operation string, response *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-	return fmt.Errorf("%s: gateway returned %s: %s", operation, response.Status, strings.TrimSpace(string(body)))
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	return fmt.Errorf("%s: %w", operation, &HTTPStatusError{StatusCode: response.StatusCode})
+}
+
+// GetRetainedPlanKey obtains the deployment-scoped private identity over the gateway.
+func (c *Client) GetRetainedPlanKey(ctx context.Context, deploymentID, token string) (string, error) {
+	target := c.runnerURL("/deployments/" + url.PathEscape(deploymentID) + "/retained-plan-key")
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set(DeploymentTokenHeader, token)
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return "", errors.New("retained plan key unavailable")
+	}
+	b, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(b) > 4096 {
+		return "", errors.New("invalid retained plan key response")
+	}
+	var body struct {
+		Identity string `json:"identity"`
+	}
+	if json.Unmarshal(b, &body) != nil || body.Identity == "" {
+		return "", errors.New("invalid retained plan key response")
+	}
+	return body.Identity, nil
 }

@@ -1,0 +1,10 @@
+# Replace image.tag with the exact coordinated, qualified Native image.
+executionMode: native
+native:
+  replicas: 2
+  configExistingSecret: site-rollout-config
+  privateFilesExistingSecret: site-runtime-files
+  terminationGracePeriodSeconds: 86520
+  initialization:
+    enabled: false
+# Runtime JSON owns Gateway/backend/tool settings. Legacy gateway environment is unused.

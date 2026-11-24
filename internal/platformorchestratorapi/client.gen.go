@@ -291,6 +291,36 @@ func (e PendingEnvironmentChangesCode) Valid() bool {
 	}
 }
 
+// Defines values for PipelineNoEffectReceiptEffect.
+const (
+	NotStarted PipelineNoEffectReceiptEffect = "not_started"
+)
+
+// Valid indicates whether the value is a known member of the PipelineNoEffectReceiptEffect enum.
+func (e PipelineNoEffectReceiptEffect) Valid() bool {
+	switch e {
+	case NotStarted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PipelineNoEffectReceiptVersion.
+const (
+	StellwerkNoEffectv1 PipelineNoEffectReceiptVersion = "stellwerk.no-effect/v1"
+)
+
+// Valid indicates whether the value is a known member of the PipelineNoEffectReceiptVersion enum.
+func (e PipelineNoEffectReceiptVersion) Valid() bool {
+	switch e {
+	case StellwerkNoEffectv1:
+		return true
+	default:
+		return false
+	}
+}
+
 // ActiveResourceNode A node in the active resource graph
 type ActiveResourceNode struct {
 	// DeploymentId Example: 01234567-89ab-cdef-0123-456789abcdef
@@ -742,7 +772,10 @@ type DeploymentResultsUpdateBody struct {
 	Error *Error `json:"error,omitempty"`
 
 	// Metadata The metadata produced by the resources involved in the deployment.
-	Metadata          DeploymentResultMetadata `json:"metadata,omitempty"`
+	Metadata DeploymentResultMetadata `json:"metadata,omitempty"`
+
+	// NoEffectReceipt Authenticated site evidence that a terminal imported pipeline claimed no mutating effect. Bound to the exact signed command payload.
+	NoEffectReceipt   *PipelineNoEffectReceipt `json:"no_effect_receipt,omitempty"`
 	ObservationResult *ObservationResult       `json:"observation_result,omitempty"`
 
 	// Outputs The encrypted outputs produced by the runner.
@@ -973,6 +1006,19 @@ type PendingEnvironmentChanges struct {
 
 // PendingEnvironmentChangesCode Example: result_may_change
 type PendingEnvironmentChangesCode string
+
+// PipelineNoEffectReceipt Authenticated site evidence that a terminal imported pipeline claimed no mutating effect. Bound to the exact signed command payload.
+type PipelineNoEffectReceipt struct {
+	CommandSha256 string                         `json:"command_sha256"`
+	Effect        PipelineNoEffectReceiptEffect  `json:"effect"`
+	Version       PipelineNoEffectReceiptVersion `json:"version"`
+}
+
+// PipelineNoEffectReceiptEffect defines model for PipelineNoEffectReceipt.Effect.
+type PipelineNoEffectReceiptEffect string
+
+// PipelineNoEffectReceiptVersion defines model for PipelineNoEffectReceipt.Version.
+type PipelineNoEffectReceiptVersion string
 
 // ResourceClass A resource class requested by the resource graph. 'default' is the default value.
 //

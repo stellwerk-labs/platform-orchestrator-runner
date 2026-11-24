@@ -17,6 +17,27 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "prepare-opentofu" {
+		if err := prepareOpentofu(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 7 && os.Args[1] == "opentofu" {
+		if err := collectOpentofu(os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 6 && os.Args[1] == "opentofu-archive" {
+		if err := archiveOpentofu(os.Args[2], os.Args[3], os.Args[4], os.Args[5]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 4 && os.Args[1] == "infracost-archive" {
 		if err := archiveInfracostSources(os.Args[2], os.Args[3]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -139,6 +160,9 @@ func check(bundle, root, arch string) error {
 	if err := checkInfracost(bundle, root, arch); err != nil {
 		return err
 	}
+	if err := checkOpentofu(bundle, root, arch); err != nil {
+		return err
+	}
 	if arch != "amd64" && arch != "arm64" {
 		return fmt.Errorf("unsupported target")
 	}
@@ -153,25 +177,6 @@ func check(bundle, root, arch string) error {
 	for target, source := range map[string]string{"application/LICENSE": filepath.Join(root, "LICENSE"), "go/LICENSE": filepath.Join(goroot, "LICENSE"), "go/PATENTS": filepath.Join(goroot, "PATENTS"), "opentofu/SOURCE.json": filepath.Join(root, "scripts/release-notices/opentofu-source.json")} {
 		if err := same(filepath.Join(bundle, target), source); err != nil {
 			return err
-		}
-	}
-	source, err := regular(filepath.Join(bundle, "opentofu/SOURCE.json"))
-	if err != nil {
-		return err
-	}
-	var vendor struct {
-		Version      string            `json:"version"`
-		SourceCommit string            `json:"sourceCommit"`
-		SourceURL    string            `json:"sourceURL"`
-		NoticeSHA256 map[string]string `json:"noticeSHA256"`
-	}
-	if json.Unmarshal(source, &vendor) != nil || vendor.Version != "1.13.2" || vendor.SourceCommit != "765062032c46cacab116b36d714db098b806dede" || vendor.SourceURL != "https://github.com/opentofu/opentofu/tree/"+vendor.SourceCommit || len(vendor.NoticeSHA256) != 3 {
-		return fmt.Errorf("invalid vendor source binding")
-	}
-	for _, name := range []string{"LICENSE", "README.md", "CHANGELOG.md"} {
-		data, err := regular(filepath.Join(bundle, "opentofu", name))
-		if err != nil || hash(data) != vendor.NoticeSHA256[name] {
-			return fmt.Errorf("vendor notice differs from authenticated archive")
 		}
 	}
 	target, err := regular(filepath.Join(bundle, "target.txt"))

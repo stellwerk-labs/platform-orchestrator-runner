@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stellwerk-labs/golib/hmessaging"
 	"github.com/stellwerk-labs/golib/hnats"
 )
@@ -119,6 +120,18 @@ func NewRunnerConsumer(connection *nats.Conn, organizationID, runnerID string, b
 	if err != nil {
 		return nil, err
 	}
+	native := strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix)
+	if native {
+		if _, err := hmessaging.NativeRunnerToken(strings.TrimPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix)); err != nil {
+			return nil, err
+		}
+		version := connection.ConnectedServerVersion()
+		var major, minor, patch int
+		_, err := fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
+		if err != nil || major < 0 || minor < 0 || patch < 0 || version != fmt.Sprintf("%d.%d.%d", major, minor, patch) || major < 2 || major == 2 && minor < 10 {
+			return nil, errors.New("native consumer requires stable NATS 2.10.0 or later")
+		}
+	}
 	if bootstrapStreams {
 		modern, err := hnats.NewJetStream(connection)
 		if err != nil {
@@ -133,13 +146,22 @@ func NewRunnerConsumer(connection *nats.Conn, organizationID, runnerID string, b
 		return nil, fmt.Errorf("create legacy JetStream consumer adapter: %w", err)
 	}
 	durable := durableName(organizationID, runnerID)
-	subscription, err := js.PullSubscribe(subject, durable,
-		nats.BindStream(hmessaging.RunnerCommandsStreamName),
-		nats.ManualAck(),
-		nats.AckExplicit(),
-		nats.AckWait(defaultAckWait),
-		nats.MaxDeliver(defaultMaxDeliver),
-	)
+	options := []nats.SubOpt{nats.BindStream(hmessaging.RunnerCommandsStreamName), nats.ManualAck(), nats.AckExplicit(), nats.AckWait(defaultAckWait), nats.MaxDeliver(defaultMaxDeliver)}
+	if native {
+		modern, err := hnats.NewJetStream(connection)
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		// CreateConsumer refuses differing existing configuration instead of updating it.
+		_, err = modern.CreateConsumer(ctx, hmessaging.RunnerCommandsStreamName, jetstream.ConsumerConfig{Durable: durable, Description: "stellwerk.runner.native/v1", FilterSubject: subject, AckPolicy: jetstream.AckExplicitPolicy, AckWait: defaultAckWait, MaxDeliver: defaultMaxDeliver})
+		if err != nil {
+			return nil, fmt.Errorf("native consumer configuration refused: %w", err)
+		}
+		options = []nats.SubOpt{nats.Bind(hmessaging.RunnerCommandsStreamName, durable), nats.ManualAck()}
+	}
+	subscription, err := js.PullSubscribe(subject, durable, options...)
 	if err != nil {
 		return nil, fmt.Errorf("create runner command consumer: %w", err)
 	}

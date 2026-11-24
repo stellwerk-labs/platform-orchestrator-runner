@@ -1,0 +1,27 @@
+[Unit]
+Description=Stellwerk Native Runner slot %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stellwerk-runner
+Group=stellwerk-runner
+UMask=0077
+Environment=ROLLOUT_CONFIG_FILE=/etc/stellwerk/native/%i/rollout.json
+Environment=ROLLOUT_WORKER_ID=%i
+ExecStart=/opt/runner/runner rollout
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=infinity
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/stellwerk/native/%i
+WorkingDirectory=/var/lib/stellwerk/native/%i
+
+[Install]
+WantedBy=multi-user.target

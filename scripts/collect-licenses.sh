@@ -101,14 +101,7 @@ while IFS='|' read -r dependency version module_dir replacement; do
     cp "$receipt" "$output/$dependency/LICENSE.provenance"
   fi
 done < "$work/unique"
-# Preserve the complete authenticated upstream notice set, not just its binary.
-: "${OPENTOFU_NOTICES_DIR:?authenticated OpenTofu notice directory required}"
-mkdir "$output/opentofu"
-for notice in LICENSE README.md CHANGELOG.md; do
-  test -f "$OPENTOFU_NOTICES_DIR/$notice" && test ! -L "$OPENTOFU_NOTICES_DIR/$notice"
-  cp "$OPENTOFU_NOTICES_DIR/$notice" "$output/opentofu/$notice"
-done
-cp "$root/scripts/release-notices/opentofu-source.json" "$output/opentofu/SOURCE.json"
+sh "$root/scripts/collect-opentofu-licenses.sh" "$output/opentofu"
 sh "$root/scripts/collect-infracost-licenses.sh" "$output/infracost"
 target_arch="$GOARCH"
 # The verifier runs on the build host, while querying the actual target graph.

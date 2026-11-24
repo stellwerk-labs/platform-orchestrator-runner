@@ -3,10 +3,18 @@ package gatewayapi
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 )
 
 var ErrNoCommand = errors.New("no runner command available")
+
+// HTTPStatusError exposes a safe status without retaining the response body.
+type HTTPStatusError struct{ StatusCode int }
+
+func (e *HTTPStatusError) Error() string {
+	return "gateway returned HTTP " + strconv.Itoa(e.StatusCode)
+}
 
 const (
 	AuthorizationAudience = "platform-orchestrator-runner-gateway"

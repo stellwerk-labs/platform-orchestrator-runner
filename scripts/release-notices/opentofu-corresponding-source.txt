@@ -1,0 +1,7 @@
+This executable is a nonofficial OpenTofu distribution built from authenticated upstream c83e7e50daff10ac704cb0811e9ffd0ad2523759 with only the supplied go.mod/go.sum dependency postimages.
+
+Extract corresponding-source.tar.gz into an empty directory. The opentofu/ directory contains the complete effective upstream source. build/ contains the authenticated input receipt and build script; dependency-source/ contains reciprocal source saved by the pinned licence collector. Preserve all notices. build/LICENSE accompanies the Stellwerk-owned build recipe.
+
+Install Go 1.27.4 through its authenticated distribution, then run sh build/build-opentofu.sh "$PWD/opentofu" /absolute/output/tofu amd64 (or arm64). The build uses normal public Go module authentication and the frozen manifest inputs. The version is 1.13.9-stellwerk.remediation.20261123.1; it is not an official upstream release.
+
+Saved-plan compatibility: plans created by a different full OpenTofu/Terraform version cannot be applied by this distribution. Re-plan using this engine and review the resulting plan. State/configuration comparisons retain the upstream 1.13.9 core version; this statement does not qualify a downgrade or any UI/API stale-plan indicator.

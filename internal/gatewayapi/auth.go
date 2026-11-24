@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/stellwerk-labs/golib/hmessaging"
 )
 
 const (
@@ -29,11 +31,15 @@ type agentTokenClaims struct {
 	Audience       string `json:"aud"`
 	OrganizationID string `json:"org_id"`
 	RunnerID       string `json:"runner_id"`
+	RunnerUUID     string `json:"runner_uuid,omitempty"`
 	IssuedAt       int64  `json:"iat"`
 	ExpiresAt      int64  `json:"exp"`
 }
 
-func SignAgentToken(privateKeyPEM []byte, organizationID, runnerID string, now time.Time) (string, error) {
+func SignAgentToken(privateKeyPEM []byte, organizationID, runnerID, runnerUUID string, now time.Time) (string, error) {
+	if err := validateAgentUUID(runnerID, runnerUUID); err != nil {
+		return "", err
+	}
 	privateKey, err := parsePrivateKey(privateKeyPEM)
 	if err != nil {
 		return "", err
@@ -53,7 +59,7 @@ func SignAgentToken(privateKeyPEM []byte, organizationID, runnerID string, now t
 	}
 	issuedAt := now.UTC().Truncate(time.Second)
 	claims, err := json.Marshal(agentTokenClaims{
-		Audience: AuthorizationAudience, OrganizationID: organizationID, RunnerID: runnerID,
+		Audience: AuthorizationAudience, OrganizationID: organizationID, RunnerID: runnerID, RunnerUUID: runnerUUID,
 		IssuedAt: issuedAt.Unix(), ExpiresAt: issuedAt.Add(agentTokenLifetime).Unix(),
 	})
 	if err != nil {
@@ -64,7 +70,10 @@ func SignAgentToken(privateKeyPEM []byte, organizationID, runnerID string, now t
 	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature), nil
 }
 
-func VerifyAgentToken(token string, publicKeyPEM []byte, organizationID, runnerID string, now time.Time) error {
+func VerifyAgentToken(token string, publicKeyPEM []byte, organizationID, runnerID, runnerUUID string, now time.Time) error {
+	if err := validateAgentUUID(runnerID, runnerUUID); err != nil {
+		return err
+	}
 	publicKey, err := parsePublicKey(publicKeyPEM)
 	if err != nil {
 		return err
@@ -99,7 +108,7 @@ func VerifyAgentToken(token string, publicKeyPEM []byte, organizationID, runnerI
 	if !ed25519.Verify(publicKey, []byte(parts[0]+"."+parts[1]), signature) {
 		return errors.New("token signature is invalid")
 	}
-	if claims.Audience != AuthorizationAudience || claims.OrganizationID != organizationID || claims.RunnerID != runnerID {
+	if claims.Audience != AuthorizationAudience || claims.OrganizationID != organizationID || claims.RunnerID != runnerID || claims.RunnerUUID != runnerUUID {
 		return errors.New("token identity or audience does not match the request")
 	}
 	issuedAt := time.Unix(claims.IssuedAt, 0)
@@ -146,4 +155,16 @@ func parsePublicKey(publicKeyPEM []byte) (ed25519.PublicKey, error) {
 		return nil, errors.New("public key is not Ed25519")
 	}
 	return publicKey, nil
+}
+
+func validateAgentUUID(runnerID, runnerUUID string) error {
+	if strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix) {
+		return errors.New("runner domain identity is invalid")
+	}
+	if runnerUUID != "" {
+		if _, err := hmessaging.NativeRunnerToken(runnerUUID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

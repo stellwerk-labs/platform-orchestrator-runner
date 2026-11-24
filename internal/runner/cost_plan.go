@@ -10,8 +10,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/processgroup"
 )
 
 const maxCostPlanBytes = 8 << 20
@@ -24,6 +27,7 @@ const infracostPricingEndpoint = "https://pricing.api.infracost.io"
 type costEstimate struct {
 	Monthly                                                  string
 	Resources, Priced, Free, Unpriced, Unknown, MissingUsage int
+	UsageBased                                               int
 }
 
 type costOutputResource struct {
@@ -119,7 +123,7 @@ func (r *baseRunner) runInfracost(ctx context.Context, data []byte) ([]byte, str
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, "breakdown", "--path", path, "--format", "json", "--no-color")
+	cmd := exec.Command(binary, "breakdown", "--path", path, "--format", "json", "--no-color")
 	cmd.Dir = dir
 	cmd.WaitDelay = time.Second
 	cmd.Env = []string{
@@ -133,7 +137,7 @@ func (r *baseRunner) runInfracost(ctx context.Context, data []byte) ([]byte, str
 	out := boundedObservationBuffer{remaining: maxCostPlanBytes}
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil || ctx.Err() != nil || out.exceeded {
+	if err := processgroup.Run(ctx, cmd); err != nil || ctx.Err() != nil || out.exceeded {
 		return nil, "estimator_unavailable"
 	}
 	return out.buffer.Bytes(), ""
@@ -242,6 +246,9 @@ func foldCostCoverage(output costOutput, result *costEstimate) bool {
 		}
 		for _, resource := range project.Breakdown.Resources {
 			price, usage := costComponentGaps(resource)
+			if costHasUsage(resource) {
+				result.UsageBased++
+			}
 			if price {
 				result.Unknown++
 				result.Priced--
@@ -254,11 +261,13 @@ func foldCostCoverage(output costOutput, result *costEstimate) bool {
 	return result.Priced >= 0
 }
 
+var costAmountPattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
+
 func costMonthlyAmount(value *string) (string, bool) {
 	if value == nil {
 		return "", true
 	}
-	if len(*value) > 64 || strings.ContainsAny(*value, "/eE") {
+	if len(*value) > 64 || !costAmountPattern.MatchString(*value) {
 		return "", false
 	}
 	amount, ok := new(big.Rat).SetString(*value)
@@ -319,4 +328,18 @@ func collectSensitiveCostVariables(module map[string]any, sensitive map[string]b
 		child, _ := call["module"].(map[string]any)
 		collectSensitiveCostVariables(child, sensitive)
 	}
+}
+
+func costHasUsage(resource costOutputResource) bool {
+	for _, component := range resource.CostComponents {
+		if component.UsageBased {
+			return true
+		}
+	}
+	for _, child := range resource.Subresources {
+		if costHasUsage(child) {
+			return true
+		}
+	}
+	return false
 }

@@ -76,9 +76,8 @@ func Launch(socketPath string) (func(), error) {
 				return
 			}
 			go func() {
-				if err := agent.ServeAgent(keyring, conn); err != nil {
-					slog.Error(fmt.Sprintf("failed to serve agent: %s", err))
-				}
+				err := agent.ServeAgent(keyring, conn)
+				slog.Error(fmt.Sprintf("failed to serve agent: %s", err))
 			}()
 		}
 	}()

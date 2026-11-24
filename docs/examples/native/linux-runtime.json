@@ -1,0 +1,25 @@
+{
+  "activation_file": "/etc/stellwerk/native/site/activation.json",
+  "postgres": {
+    "dsn_file": "/etc/stellwerk/native/site/postgres-dsn",
+    "identity_file": "/etc/stellwerk/native/site/site.agekey",
+    "worker_id": "",
+    "concurrency": 4,
+    "worker_concurrency": 2,
+    "application_schema": "stellwerk_rollouts",
+    "system_schema": "stellwerk_dbos"
+  },
+  "directory": "/var/lib/stellwerk/native/worker-0/scratch",
+  "org_id": "REPLACE_WITH_ORGANIZATION",
+  "runner_id": "REPLACE_WITH_RUNNER_SLUG",
+  "runner_uuid": "3cbdc8ce-60d5-4ccc-9900-c7b6ae874897",
+  "public_key_file": "/etc/stellwerk/native/site/verification-key",
+  "agent_private_key_file": "/etc/stellwerk/native/site/agent-private-key.pem",
+  "gateway_url": "https://REPLACE_WITH_GATEWAY/runner-gateway",
+  "gateway_ca_file": "/etc/stellwerk/native/site/gateway-ca.crt",
+  "listen": "127.0.0.1:8081",
+  "api_token_file": "/etc/stellwerk/native/site/operator-token",
+  "kubernetes_backend_config_path": "/etc/stellwerk/native/site/backend-kubeconfig",
+  "tools": [],
+  "capabilities": []
+}

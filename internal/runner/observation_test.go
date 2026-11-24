@@ -103,3 +103,46 @@ func TestObservationBufferLimitCannotBeBypassedByIOCopy(t *testing.T) {
 	require.True(t, buffer.exceeded)
 	require.LessOrEqual(t, buffer.buffer.Len(), 8)
 }
+
+func TestObservationResourceIdentityPairsOnlyTheSameInstance(t *testing.T) {
+	input := `{"format_version":"1.2","terraform_version":"1.17.1","complete":true,"errored":false,"configuration":{},"planned_values":{},"resource_drift":[{"address":"local_file.SENSITIVE_A","type":"local_file","change":{"actions":["delete"]}},{"address":"local_file.SENSITIVE_B","type":"local_file","change":{"actions":["update"]}}],"resource_changes":[{"address":"local_file.SENSITIVE_B","type":"local_file","change":{"actions":["update"]}},{"address":"local_file.SENSITIVE_A","type":"local_file","change":{"actions":["create"]}},{"address":"local_file.SENSITIVE_A","deposed":"SENSITIVE_OLD","type":"local_file","change":{"actions":["delete"]}},{"address":"local_file.SENSITIVE_A","type":"terraform_data","change":{"actions":["create"]}},{"type":"local_file","change":{"actions":["create"]}}]}`
+	result, err := parseObservationPlan([]byte(input), "terraform")
+	require.NoError(t, err)
+	require.Equal(t, "resource_1", result.ObservedChanges[0].Id)
+	require.Equal(t, "resource_2", result.ObservedChanges[1].Id)
+	require.Equal(t, result.ObservedChanges[1].Id, result.ProposedChanges[0].Id)
+	require.Equal(t, result.ObservedChanges[0].Id, result.ProposedChanges[1].Id)
+	require.Equal(t, "resource_3", result.ProposedChanges[2].Id)
+	require.Equal(t, "resource_4", result.ProposedChanges[3].Id)
+	require.Equal(t, "proposed_5", result.ProposedChanges[4].Id)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "SENSITIVE")
+	require.NotContains(t, string(encoded), "address")
+	require.NotContains(t, string(encoded), "deposed")
+}
+
+func TestObservationResourceIdentityRejectsDuplicateInstances(t *testing.T) {
+	change := `{"address":"local_file.SENSITIVE","type":"local_file","change":{"actions":["update"]}}`
+	for _, field := range []string{"resource_drift", "resource_changes"} {
+		input := `{"format_version":"1.2","terraform_version":"1.17.1","complete":true,"errored":false,"configuration":{},"planned_values":{},"` + field + `":[` + change + `,` + change + `]}`
+		result, err := parseObservationPlan([]byte(input), "terraform")
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.NotContains(t, err.Error(), "SENSITIVE")
+	}
+}
+
+func TestObservationCommandRetainsPrivateStderrAndOutputBound(t *testing.T) {
+	r := baseRunner{binaryPath: "/bin/sh"}
+	for _, output := range []string{"ok", "too-long"} {
+		data, err := r.observationCommand(t.Context(), 2, "-c", `printf PRIVATE_OBSERVATION_STDERR >&2; printf '%s' "$1"`, "sh", output)
+		if output == "ok" {
+			require.NoError(t, err)
+			require.Equal(t, output, string(data))
+		} else {
+			require.EqualError(t, err, "observation command failed")
+			require.Nil(t, data)
+		}
+	}
+}

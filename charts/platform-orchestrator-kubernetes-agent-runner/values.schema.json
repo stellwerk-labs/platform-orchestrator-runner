@@ -2,6 +2,68 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "properties": {
+      "executionMode": {
+        "type": "string",
+        "enum": [
+          "remote",
+          "native"
+        ]
+      },
+      "native": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "replicas": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1024
+          },
+          "configExistingSecret": {
+            "type": "string"
+          },
+          "configKey": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "privateFilesExistingSecret": {
+            "type": "string"
+          },
+          "terminationGracePeriodSeconds": {
+            "type": "integer",
+            "minimum": 86520
+          },
+          "initialization": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "configExistingSecret": {
+                "type": "string"
+              },
+              "privateFilesExistingSecret": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled",
+              "configExistingSecret",
+              "privateFilesExistingSecret"
+            ]
+          }
+        },
+        "required": [
+          "replicas",
+          "configExistingSecret",
+          "configKey",
+          "privateFilesExistingSecret",
+          "terminationGracePeriodSeconds",
+          "initialization"
+        ]
+      }
+,
     "affinity": {
       "additionalProperties": false,
       "required": [],
@@ -131,6 +193,7 @@
     "airgap": {
       "additionalProperties": false,
       "properties": {
+        "runnerUuid": {"type": "string", "pattern": "^$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "not": {"const": "00000000-0000-0000-0000-000000000000"}},
         "gatewaySecret": {"type": "string"},
         "publicKeyKey": {"type": "string"},
         "runnerTokenSaltKey": {"type": "string"},

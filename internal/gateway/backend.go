@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ type Backend interface {
 	Reject(ctx context.Context, delivery CommandDelivery, cause error) error
 	RejectReceipt(ctx context.Context, ackSubject string, streamSequence uint64, cause error) error
 	GetBundle(ctx context.Context, key string) (io.ReadCloser, error)
+	GetLog(ctx context.Context, key string) (io.ReadCloser, error)
 	PutLog(ctx context.Context, key string, content io.Reader) (StoredObject, error)
 	DeleteLog(ctx context.Context, key string) error
 	Publish(ctx context.Context, message hmessaging.Message) error
@@ -132,6 +134,11 @@ func (b *NATSBackend) Reject(ctx context.Context, delivery CommandDelivery, caus
 	if dlq.Header == nil {
 		dlq.Header = hmessaging.Header{}
 	}
+	for key := range dlq.Header {
+		if strings.HasPrefix(strings.ToLower(key), "nats-") || strings.EqualFold(key, hmessaging.HeaderExpiresAt) {
+			delete(dlq.Header, key)
+		}
+	}
 	dlq.Header.Set("Po-Dead-Letter-Reason", cause.Error())
 	if err := b.publisher.Publish(ctx, dlq); err != nil {
 		return err
@@ -180,8 +187,8 @@ func (b *NATSBackend) GetBundle(_ context.Context, key string) (io.ReadCloser, e
 	return b.bundles.Get(key)
 }
 
-func (b *NATSBackend) PutLog(_ context.Context, key string, content io.Reader) (StoredObject, error) {
-	info, err := b.logs.Put(&nats.ObjectMeta{Name: key}, content)
+func (b *NATSBackend) PutLog(ctx context.Context, key string, content io.Reader) (StoredObject, error) {
+	info, err := b.logs.Put(&nats.ObjectMeta{Name: key}, content, nats.Context(ctx))
 	if err != nil {
 		return StoredObject{}, err
 	}
@@ -203,3 +210,8 @@ func decodeCommandEnvelope(message hmessaging.Message) (hmessaging.CommandEnvelo
 	}
 	return envelope, nil
 }
+
+func (b *NATSBackend) GetLog(ctx context.Context, key string) (io.ReadCloser, error) {
+	return b.logs.Get(key, nats.Context(ctx))
+}
+func isLogNotFound(err error) bool { return errors.Is(err, nats.ErrObjectNotFound) }

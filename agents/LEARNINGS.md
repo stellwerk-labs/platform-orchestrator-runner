@@ -17,3 +17,7 @@ With trimpath, Go build metadata can omit ldflags, so validate exact debug/build
 Go overlays cannot replace files beneath GOMODCACHE; a dedicated authenticated private cache permits explicit dependency patches without changing shared sources or losing module identity.
 Sensitive Terraform provider-region variables are outside planned resource masks; check configuration declarations and references before invoking the pricing client.
 Some dependencies carry their complete copyright/licence notice inline rather than in a standalone LICENSE file; preserve the exact pinned header and full terms.
+
+## Native pipeline source export
+
+Keep the released application source and its public SDK contracts aligned; preserve existing compatibility exports.

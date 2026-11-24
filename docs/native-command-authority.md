@@ -1,0 +1,13 @@
+# Native command authority, unreleased format7
+
+A Native pipeline command carries the accepted7-field execution target: domain Runner ID, registration UUID, runtime, pipeline version, keyed tools digest, state backend discriminator and Core state-configuration digest. Command/request identity and UUID must match it. The local Engine checks its actual runtime, UUID, owned catalogue and existing backend validation. The Core state digest remains an opaque accepted reference, not a locally reconstructed private backend identity.
+
+The outer transport remains protocol1, type `execute-rollout-v1` and command ID `pipeline:<Deployment UUID>`. Its Runner route is the UUID token; inner Runner IDs stay domain slugs. The signed bundle is embedded, bounded and hashed. Native requests never mint or contain a legacy `deployment_token`, even empty/null, duplicate/case aliases or escaped field spellings. Fresh and retained decoding inspect request member names before projection. Legacy/v1 retains its original parsing and token behavior.
+
+Native metadata uses the fixed compiled `platform_orchestrator_metadata` output through the existing empty-key default. The output recipient comes from the accepted Deployment, independently of the site storage identity and Agent authentication key. The actual DP producer emits OpenTofu. Terraform remains a separately qualified signed Engine/artifact path; this change adds no customer tool selector.
+
+Format7 refuses old format6 profiles without rewriting encrypted commands, keys, claims or recovery state. Keep the old binary and history for controlled reconciliation. It is a fresh unreleased profile, not an upgrade/reset or state-handoff mechanism. Actual historical refusal tests seed with a retained old executable, including approval wait and a genuine started Apply claim.
+
+Standalone Native Engine/HA tests use their real local backend and a labelled opaque fixture digest; Core does not register local state. Registered-target contract tests use a new owned Kubernetes namespace and namespace-limited private context from an explicit admin configuration, with exact DP-emitted OpenTofu bytes and actual TLS Gateway/NATS/CLI execution. They are accepted-authority fixtures, not public Core/IAM enrollment or customer activation.
+
+D2a supplies payload/decoder semantics only. Normal DP Native producer/worker dispatch remains closed until D2b and direct-access, controls/logs and custody/bootstrap proofs qualify. Removing the unused direct token does not replace Gateway/DP checks against legacy aliases. Unknown effects remain fenced, and delivery timeout is never NoEffect proof.

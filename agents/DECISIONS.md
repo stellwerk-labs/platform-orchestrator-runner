@@ -23,3 +23,7 @@ The stock release links deprecated OpenPGP code; the selected private-cache buil
 Authenticate module archives before those exact hash-guarded edits; preserve original module identities for actual binary scanning.
 Current v2 changes hosted authentication and performs dashboard/telemetry calls, so it does not satisfy the pricing-key-only and pricing-only network contract.
 Patch maintenance is an explicit build obligation, not an unmodified-vendor claim.
+
+## Native pipeline source export
+
+Prepare Native pipeline application changes as a source export with all product code, tests, documentation and release controls retained.

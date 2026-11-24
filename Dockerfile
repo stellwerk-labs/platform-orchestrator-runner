@@ -1,4 +1,4 @@
-FROM alpine:3.23.7@sha256:eaa20f3de212fa5cda0c64dc715b55ce28619928536d0d2a97ec1a922c1edce8 AS tofu
+FROM alpine:3.23.7@sha256:eaa20f3de212fa5cda0c64dc715b55ce28619928536d0d2a97ec1a922c1edce8 AS legacy-tofu
 
 RUN apk --no-cache add curl gpg gpg-agent
 
@@ -11,15 +11,6 @@ RUN set -eu; \
     export GNUPGHOME="$(mktemp -d)"; \
     trap 'status=$?; trap - EXIT; gpgconf --homedir "$GNUPGHOME" --kill all || status=1; rm -rf "$GNUPGHOME" || status=1; exit "$status"' EXIT; \
     ./install-opentofu.sh --install-method standalone --opentofu-version 1.13.2 \
-    --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
-    --install-path / --symlink-path -
-
-FROM tofu AS legacy-tofu
-
-RUN set -eu; \
-    export GNUPGHOME="$(mktemp -d)"; \
-    trap 'status=$?; trap - EXIT; gpgconf --homedir "$GNUPGHOME" --kill all || status=1; rm -rf "$GNUPGHOME" || status=1; exit "$status"' EXIT; \
-    ./install-opentofu.sh --install-method standalone --opentofu-version 1.10.0 \
     --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
     --install-path /legacy --symlink-path -
 
@@ -38,6 +29,21 @@ RUN --mount=target=. \
     --mount=type=cache,target=/root/.cache/go-build \
     GOARCH="$TARGETARCH" go build -o /opt/runner/runner ./cmd/runner
 
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS tofu
+
+WORKDIR /app
+COPY . .
+ARG TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    sh scripts/prepare-opentofu.sh /opentofu-build
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    sh scripts/build-opentofu.sh /opentofu-build/source /tofu "$TARGETARCH"
+
+FROM scratch AS tofu-test-export
+COPY --from=tofu /tofu /tofu
+
 FROM builder AS infracost
 
 RUN apk add --no-cache curl
@@ -50,21 +56,24 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh /app/scripts/build-infracost.sh /infracost-build/source /opt/infracost/infracost "$TARGETARCH"
 
+FROM tofu-test-export AS pipeline-test-export
+
+COPY --from=infracost /opt/infracost/infracost /infracost
+
 FROM infracost AS security
 
 WORKDIR /app
 
-ARG RELEASE_VERSION
-ENV INFRACOST_SOURCE_DIR=/infracost-source INFRACOST_BINARY=/opt/infracost/infracost INFRACOST_BUILD_DIR=/infracost-build
+ENV INFRACOST_SOURCE_DIR=/infracost-source INFRACOST_BINARY=/opt/infracost/infracost INFRACOST_BUILD_DIR=/infracost-build OPENTOFU_BUILD_DIR=/opentofu-build OPENTOFU_BINARY=/opt/runner/tofu
 COPY --from=tofu /tofu /opt/runner/tofu
-COPY --from=tofu /LICENSE /README.md /CHANGELOG.md /opt/opentofu-notices/
+COPY --from=tofu /opentofu-build /opentofu-build
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     sh scripts/check-go-security.sh binary /opt/runner/runner \
     && sh scripts/check-go-security.sh binary /opt/infracost/infracost \
-    && sh scripts/check-go-security.sh vendor-binary "$RELEASE_VERSION" /opt/runner/tofu \
-    && GOARCH="$TARGETARCH" OPENTOFU_NOTICES_DIR=/opt/opentofu-notices \
-       sh scripts/collect-licenses.sh /opt/licenses ./cmd/runner
+    && sh scripts/check-go-security.sh binary /opt/runner/tofu \
+    && export OPENTOFU_GO="$(GOTOOLCHAIN=go1.27.4 go env GOROOT)/bin/go" \
+    && GOARCH="$TARGETARCH" sh scripts/collect-licenses.sh /opt/licenses ./cmd/runner
 
 FROM builder AS artifact-test-builder
 
@@ -79,6 +88,7 @@ COPY --from=artifact-test-builder /opt/runner/artifact-tests /opt/runner/artifac
 COPY --from=tofu /tofu /usr/local/bin/tofu
 COPY --from=legacy-tofu /legacy/tofu /opt/runner/legacy-tofu
 COPY --from=infracost /opt/infracost/infracost /opt/runner/infracost
+RUN --network=none /usr/local/bin/tofu version && /usr/local/bin/tofu version -json
 RUN --network=none /opt/runner/artifact-tests -test.run '^TestInfracost' -test.v
 RUN --network=none IAC_LEGACY_BINARY=/opt/runner/legacy-tofu \
     /opt/runner/artifact-tests -test.run '^TestArtifactExecutionPreservesLegacyHistory$' -test.v

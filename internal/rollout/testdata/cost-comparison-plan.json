@@ -1,0 +1,36 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.13.2",
+  "planned_values": {
+    "root_module": {
+      "resources": [{
+        "address": "aws_ebs_volume.PRIVATE_ADDRESS",
+        "mode": "managed",
+        "type": "aws_ebs_volume",
+        "name": "PRIVATE_ADDRESS",
+        "provider_name": "registry.terraform.io/hashicorp/aws",
+        "values": {"region": "eu-central-1", "availability_zone": "eu-central-1a", "type": "gp3", "size": 100, "iops": 3000, "throughput": 125}
+      }]
+    }
+  },
+  "prior_state": {
+    "format_version": "1.0",
+    "values": {
+      "root_module": {
+        "resources": [{
+          "address": "aws_ebs_volume.PRIVATE_ADDRESS",
+          "mode": "managed",
+          "type": "aws_ebs_volume",
+          "name": "PRIVATE_ADDRESS",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {"region": "eu-central-1", "availability_zone": "eu-central-1a", "type": "gp3", "size": 100, "iops": 3000, "throughput": 125}
+        }]
+      }
+    }
+  },
+  "resource_changes": [],
+  "configuration": {
+    "provider_config": {"aws": {"name": "aws", "full_name": "registry.terraform.io/hashicorp/aws", "expressions": {"region": {"constant_value": "eu-central-1"}}}},
+    "root_module": {"resources": [{"address": "aws_ebs_volume.PRIVATE_ADDRESS", "mode": "managed", "type": "aws_ebs_volume", "name": "PRIVATE_ADDRESS", "provider_config_key": "aws"}]}
+  }
+}

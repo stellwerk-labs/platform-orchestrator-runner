@@ -26,3 +26,7 @@ See DECISIONS.md and LEARNINGS.md for the selected architecture and artifact les
 ## 2026-11-13: Public Runner source preparation
 
 Removed the private installation identifier from the 3.3.0 residual-risk disposition before public source qualification. The accepted version family, exact binaries, advisory inventory and unresolved applicability remain unchanged. No workflow or application behavior changed.
+
+## Native pipeline source export
+
+Prepared the Native pipeline application source export. Public artifact publication and hosted qualification are separate release steps.

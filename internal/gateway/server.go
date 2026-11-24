@@ -12,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/stellwerk-labs/golib/hmessaging"
 
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/gatewayapi"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/nativelogs"
 )
 
 const (
@@ -29,28 +32,40 @@ const (
 )
 
 type ServerConfig struct {
-	BasePath        string
-	Backend         Backend
-	PublicKeys      PublicKeyResolver
-	ReceiptKey      []byte
-	RunnerTokenSalt string
-	FetchWait       time.Duration
-	MaxLogBytes     int64
-	Now             func() time.Time
+	DeploymentAuthorityDPURL string
+	DisableDirectDeployments bool
+	RetainedPlansEnabled     bool
+	RetainedPlanDPURL        string
+	BasePath                 string
+	Backend                  Backend
+	PublicKeys               PublicKeyResolver
+	ReceiptKey               []byte
+	RunnerTokenSalt          string
+	FetchWait                time.Duration
+	MaxLogBytes              int64
+	Now                      func() time.Time
 }
 
 type Server struct {
-	basePath        string
-	backend         Backend
-	publicKeys      PublicKeyResolver
-	receipts        *receiptCipher
-	runnerTokenSalt string
-	fetchWait       time.Duration
-	maxLogBytes     int64
-	now             func() time.Time
+	deploymentAuthorityDPURL  string
+	disableDirectDeployments  bool
+	deploymentAuthorityClient *http.Client
+	retainedPlansEnabled      bool
+	retainedPlanDPURL         string
+	basePath                  string
+	backend                   Backend
+	publicKeys                PublicKeyResolver
+	receipts                  *receiptCipher
+	runnerTokenSalt           string
+	fetchWait                 time.Duration
+	maxLogBytes               int64
+	now                       func() time.Time
 }
 
 func NewServer(config ServerConfig) (*Server, error) {
+	if err := gatewayapi.ValidateDirectDeploymentAccess(config.DeploymentAuthorityDPURL, config.DisableDirectDeployments, config.RetainedPlansEnabled); err != nil {
+		return nil, err
+	}
 	if config.Backend == nil || config.PublicKeys == nil {
 		return nil, errors.New("gateway backend and public key resolver are required")
 	}
@@ -75,7 +90,9 @@ func NewServer(config ServerConfig) (*Server, error) {
 		config.Now = time.Now
 	}
 	return &Server{
-		basePath: basePath, backend: config.Backend, publicKeys: config.PublicKeys,
+		deploymentAuthorityDPURL: config.DeploymentAuthorityDPURL, disableDirectDeployments: config.DisableDirectDeployments,
+		deploymentAuthorityClient: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		basePath:                  basePath, backend: config.Backend, publicKeys: config.PublicKeys, retainedPlansEnabled: config.RetainedPlansEnabled, retainedPlanDPURL: config.RetainedPlanDPURL,
 		receipts: receipts, runnerTokenSalt: config.RunnerTokenSalt,
 		fetchWait: config.FetchWait, maxLogBytes: config.MaxLogBytes, now: config.Now,
 	}, nil
@@ -83,6 +100,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("PUT "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/native-log-artifacts/environments/{environmentID}/deployments/{deploymentID}", s.putNativeLog)
 	mux.HandleFunc("GET "+s.basePath+"/healthz", func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
 	})
@@ -93,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/events", s.postEvent)
 	mux.HandleFunc("GET "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/deployments/{deploymentID}/bundle", s.getBundle)
 	mux.HandleFunc("POST "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/deployments/{deploymentID}/results", s.postResults)
+	mux.HandleFunc("GET "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/deployments/{deploymentID}/retained-plan-key", s.getRetainedPlanKey)
 	mux.HandleFunc("PUT "+s.basePath+"/v1/orgs/{organizationID}/runners/{runnerID}/environments/{environmentID}/deployments/{deploymentID}/logs", s.putLogs)
 	return mux
 }
@@ -115,6 +134,12 @@ func (s *Server) nextCommand(response http.ResponseWriter, request *http.Request
 			return
 		}
 		envelope, err := decodeCommandEnvelope(delivery.Message)
+		if err == nil && strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix) {
+			expected, identityErr := hmessaging.NativeMessageID(organizationID, runnerID, "commands", envelope.Type, envelope.CommandID)
+			if identityErr != nil || envelope.ProtocolVersion != hmessaging.ProtocolVersionV1 || delivery.Message.ID != expected {
+				err = errors.New("native command identity is invalid")
+			}
+		}
 		if err != nil || envelope.OrganizationID != organizationID || envelope.RunnerID != runnerID || envelope.CommandID == "" {
 			if err == nil {
 				err = errors.New("command envelope identity does not match the authenticated runner")
@@ -189,13 +214,40 @@ func (s *Server) postEvent(response http.ResponseWriter, request *http.Request) 
 		writeError(response, http.StatusBadRequest, "runner event identity or payload is invalid")
 		return
 	}
+	messageID := event.EventID
+	native := strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix)
+	if native {
+		if event.Type == "rollout-control-result" && (len(body) > 8<<10 || !exactControlMembers(body, "protocol_version event_id command_id organization_id runner_id deployment_id type created_at payload")) {
+			writeError(response, http.StatusBadRequest, "control event metadata is invalid")
+			return
+		}
+		if event.Type == nativelogs.ReadyEventType {
+			_, descriptor, parseErr := nativelogs.ParseReady(body)
+			if parseErr != nil || descriptor.Authority.Target.RunnerID != request.PathValue("runnerID") || s.storedNativeLog(request.Context(), descriptor) != nil {
+				writeError(response, http.StatusBadRequest, "native log reference is invalid or unavailable")
+				return
+			}
+		}
+		if event.ProtocolVersion != hmessaging.ProtocolVersionV1 || !validNativeEventIdentity(event) {
+			writeError(response, http.StatusBadRequest, "native event type or protocol is invalid")
+			return
+		}
+		messageID, err = hmessaging.NativeMessageID(organizationID, runnerID, "events", event.Type, event.EventID)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, "native event identity is invalid")
+			return
+		}
+	} else if strings.HasPrefix(event.EventID, hmessaging.NativeMessageIDPrefix) || slices.ContainsFunc(request.Header.Values(hmessaging.HeaderMessageID), func(value string) bool { return strings.HasPrefix(value, hmessaging.NativeMessageIDPrefix) }) {
+		writeError(response, http.StatusBadRequest, "legacy event uses a reserved identity")
+		return
+	}
 	subject, err := hmessaging.RunnerEventSubject(organizationID, runnerID, event.Type)
 	if err != nil {
 		writeError(response, http.StatusBadRequest, "runner event type is invalid")
 		return
 	}
 	if err := s.backend.Publish(request.Context(), hmessaging.Message{
-		ID: event.EventID, Subject: subject, Data: body, CreatedAt: event.CreatedAt,
+		ID: messageID, Subject: subject, Data: body, CreatedAt: event.CreatedAt,
 	}); err != nil {
 		writeError(response, http.StatusServiceUnavailable, "persist runner event")
 		return
@@ -254,10 +306,11 @@ func (s *Server) handleReceipt(response http.ResponseWriter, request *http.Reque
 }
 
 func (s *Server) getBundle(response http.ResponseWriter, request *http.Request) {
-	organizationID, runnerID, deploymentID, ok := s.authenticateDeployment(response, request)
+	access, ok := s.authenticateDeployment(response, request)
 	if !ok {
 		return
 	}
+	organizationID, runnerID, deploymentID := access.OrganizationID, access.RunnerID, access.DeploymentID
 	bundle, err := s.backend.GetBundle(request.Context(), organizationID+"/"+deploymentID)
 	if err != nil {
 		writeError(response, http.StatusNotFound, "deployment bundle is not available")
@@ -272,10 +325,11 @@ func (s *Server) getBundle(response http.ResponseWriter, request *http.Request) 
 }
 
 func (s *Server) postResults(response http.ResponseWriter, request *http.Request) {
-	organizationID, runnerID, deploymentID, ok := s.authenticateDeployment(response, request)
+	access, ok := s.authenticateDeployment(response, request)
 	if !ok {
 		return
 	}
+	organizationID, runnerID, deploymentID := access.OrganizationID, access.RunnerID, access.DeploymentID
 	body, err := io.ReadAll(io.LimitReader(request.Body, maxResultBytes+1))
 	if err != nil || int64(len(body)) > maxResultBytes || !json.Valid(body) {
 		writeError(response, http.StatusBadRequest, "deployment result must be valid bounded JSON")
@@ -305,13 +359,18 @@ func (s *Server) postResults(response http.ResponseWriter, request *http.Request
 }
 
 func (s *Server) putLogs(response http.ResponseWriter, request *http.Request) {
-	organizationID, runnerID, deploymentID, ok := s.authenticateDeployment(response, request)
+	access, ok := s.authenticateDeployment(response, request)
 	if !ok {
 		return
 	}
+	organizationID, runnerID, deploymentID := access.OrganizationID, access.RunnerID, access.DeploymentID
 	environmentID := request.PathValue("environmentID")
 	if _, err := uuid.Parse(environmentID); err != nil {
 		writeError(response, http.StatusBadRequest, "environment ID must be a UUID")
+		return
+	}
+	if access.EnvironmentUUID != "" && access.EnvironmentUUID != environmentID {
+		writeError(response, http.StatusForbidden, "deployment environment is invalid")
 		return
 	}
 	key := environmentID + "/" + deploymentID
@@ -352,7 +411,7 @@ func (s *Server) putLogs(response http.ResponseWriter, request *http.Request) {
 
 func (s *Server) authenticateAgent(response http.ResponseWriter, request *http.Request) (string, string, bool) {
 	organizationID, runnerID := request.PathValue("organizationID"), request.PathValue("runnerID")
-	if _, err := hmessaging.RunnerCommandSubject(organizationID, runnerID); err != nil {
+	if _, err := hmessaging.RunnerCommandSubject(organizationID, runnerID); err != nil || strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix) {
 		writeError(response, http.StatusBadRequest, "runner identity is invalid")
 		return "", "", false
 	}
@@ -361,31 +420,60 @@ func (s *Server) authenticateAgent(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusUnauthorized, "Bearer authorization is required")
 		return "", "", false
 	}
-	publicKey, err := s.publicKeys.Resolve(request.Context(), organizationID, runnerID)
-	if err != nil || gatewayapi.VerifyAgentToken(authorization[1], publicKey, organizationID, runnerID, s.now()) != nil {
+	authority, err := s.publicKeys.Resolve(request.Context(), organizationID, runnerID)
+	transportID := runnerID
+	if err == nil && authority.RunnerUUID != "" {
+		transportID, err = hmessaging.NativeRunnerToken(authority.RunnerUUID)
+	}
+	if err != nil || gatewayapi.VerifyAgentToken(authorization[1], authority.PublicKey, organizationID, runnerID, authority.RunnerUUID, s.now()) != nil {
 		writeError(response, http.StatusUnauthorized, "runner authorization is invalid")
 		return "", "", false
 	}
-	return organizationID, runnerID, true
+	return organizationID, transportID, true
 }
 
-func (s *Server) authenticateDeployment(response http.ResponseWriter, request *http.Request) (string, string, string, bool) {
+func (s *Server) authenticateDeployment(response http.ResponseWriter, request *http.Request) (deploymentAccess, bool) {
 	organizationID, runnerID, deploymentID := request.PathValue("organizationID"), request.PathValue("runnerID"), request.PathValue("deploymentID")
-	if _, err := hmessaging.RunnerEventSubject(organizationID, runnerID, "deployment-result"); err != nil {
+	if _, err := hmessaging.RunnerEventSubject(organizationID, runnerID, "deployment-result"); err != nil || strings.HasPrefix(runnerID, hmessaging.NativeRunnerTokenPrefix) {
 		writeError(response, http.StatusBadRequest, "runner identity is invalid")
-		return "", "", "", false
+		return deploymentAccess{}, false
 	}
 	if _, err := uuid.Parse(deploymentID); err != nil {
 		writeError(response, http.StatusBadRequest, "deployment ID must be a UUID")
-		return "", "", "", false
+		return deploymentAccess{}, false
 	}
 	expected := deploymentToken(s.runnerTokenSalt, organizationID, deploymentID)
 	provided := request.Header.Get(gatewayapi.DeploymentTokenHeader)
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
 		writeError(response, http.StatusUnauthorized, "deployment authorization is invalid")
-		return "", "", "", false
+		return deploymentAccess{}, false
 	}
-	return organizationID, runnerID, deploymentID, true
+	if s.disableDirectDeployments {
+		writeError(response, http.StatusForbidden, "native execution requires authenticated agent delivery")
+		return deploymentAccess{}, false
+	}
+	if s.deploymentAuthorityDPURL != "" {
+		if len(request.Header.Values(gatewayapi.DeploymentTokenHeader)) != 1 {
+			writeError(response, http.StatusUnauthorized, "deployment authorization is invalid")
+			return deploymentAccess{}, false
+		}
+		access, err := s.legacyDeploymentAccess(request.Context(), organizationID, runnerID, deploymentID, provided)
+		if err != nil {
+			writeError(response, http.StatusForbidden, "legacy deployment authority unavailable")
+			return deploymentAccess{}, false
+		}
+		return access, true
+	}
+	authority, err := s.publicKeys.Resolve(request.Context(), organizationID, runnerID)
+	if err != nil {
+		writeError(response, http.StatusServiceUnavailable, "runner authority is unavailable")
+		return deploymentAccess{}, false
+	}
+	if authority.RunnerUUID != "" {
+		writeError(response, http.StatusForbidden, "native execution requires authenticated agent delivery")
+		return deploymentAccess{}, false
+	}
+	return deploymentAccess{Legacy: true, OrganizationID: organizationID, RunnerID: runnerID, DeploymentID: deploymentID}, true
 }
 
 func deploymentToken(secret, organizationID, deploymentID string) string {
@@ -437,4 +525,42 @@ func writeJSON(response http.ResponseWriter, status int, body any) {
 
 func writeError(response http.ResponseWriter, status int, message string) {
 	writeJSON(response, status, map[string]string{"error": message})
+}
+
+func (s *Server) getRetainedPlanKey(w http.ResponseWriter, r *http.Request) {
+	if !s.retainedPlansEnabled {
+		http.NotFound(w, r)
+		return
+	}
+	access, ok := s.authenticateDeployment(w, r)
+	if !ok {
+		return
+	}
+	org, runnerID, deploymentID := access.OrganizationID, access.RunnerID, access.DeploymentID
+	target, err := url.JoinPath(s.retainedPlanDPURL, "v1", "orgs", org, "runners", runnerID, "deployments", deploymentID, "retained-plan-key")
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "retained plan key unavailable")
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "retained plan key unavailable")
+		return
+	}
+	req.Header.Set(gatewayapi.DeploymentTokenHeader, r.Header.Get(gatewayapi.DeploymentTokenHeader))
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "retained plan key unavailable")
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4097))
+	if err != nil || len(b) > 4096 || resp.StatusCode != http.StatusOK {
+		writeError(w, http.StatusForbidden, "retained plan key unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(b)
 }

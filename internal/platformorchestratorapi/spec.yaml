@@ -1568,10 +1568,27 @@ components:
           type: integer
           minimum: 0
           maximum: 1000000
+    PipelineNoEffectReceipt:
+      description: Authenticated site evidence that a terminal imported pipeline claimed no mutating effect. Bound to the exact signed command payload.
+      type: object
+      additionalProperties: false
+      required: [version, command_sha256, effect]
+      properties:
+        version:
+          type: string
+          enum: [stellwerk.no-effect/v1]
+        command_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        effect:
+          type: string
+          enum: [not_started]
     DeploymentResultsUpdateBody:
       description: The outcome of the runner execution.
       type: object
       properties:
+        no_effect_receipt:
+          $ref: '#/components/schemas/PipelineNoEffectReceipt'
         observation_result:
           $ref: "#/components/schemas/ObservationResult"
         outputs:

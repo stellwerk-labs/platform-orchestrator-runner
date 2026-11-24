@@ -1,0 +1,9 @@
+executionMode: native
+native:
+  replicas: 0
+  configExistingSecret: site-rollout-config
+  privateFilesExistingSecret: site-runtime-files
+  initialization:
+    enabled: true
+    configExistingSecret: site-init-config
+    privateFilesExistingSecret: site-init-files

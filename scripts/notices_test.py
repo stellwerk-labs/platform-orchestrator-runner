@@ -14,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class Notices(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        required = ("OPENTOFU_BUILD_DIR", "OPENTOFU_GO", "OPENTOFU_BINARY_AMD64", "OPENTOFU_BINARY_ARM64")
+        if not all(os.environ.get(key) for key in required):
+            raise RuntimeError("prepare authenticated OpenTofu source and both target binaries before the notice suite")
+        cls.opentofu_binaries = {arch: os.environ["OPENTOFU_BINARY_"+arch.upper()] for arch in ("amd64", "arm64")}
         cls.workspace = tempfile.TemporaryDirectory(prefix="runner-notices-")
         cls.work = Path(cls.workspace.name)
         cls.env = {**os.environ, "GOTOOLCHAIN": "go1.26.11", "GOWORK": "off", "GOENV": "off", "CGO_ENABLED": "0", "PYTHONDONTWRITEBYTECODE": "1"}
@@ -36,18 +40,18 @@ class Notices(unittest.TestCase):
         cls.checker = cls.work / "noticecheck"
         subprocess.run(["go", "build", "-o", str(cls.checker), "./scripts/noticecheck"], cwd=ROOT, env=cls.env, check=True, timeout=120)
         for arch in ("amd64", "arm64"):
-            env = {**cls.env, "INFRACOST_BINARY": cls.binaries[arch], "GOARCH": arch, "OPENTOFU_NOTICES_DIR": str(ROOT / "scripts/release-notices/testdata/opentofu")}
+            env = {**cls.env, "INFRACOST_BINARY": cls.binaries[arch], "GOARCH": arch, "OPENTOFU_BINARY": cls.opentofu_binaries[arch]}
             subprocess.run(["sh", "scripts/collect-licenses.sh", str(cls.work / arch), "./cmd/runner"], cwd=ROOT, env=env, check=True, timeout=180)
 
     @classmethod
     def tearDownClass(cls):
         cls.workspace.cleanup()
 
-    def check(self, bundle, arch="arm64", binary=None):
-        return subprocess.run([str(self.checker), str(bundle), str(ROOT), arch], cwd=ROOT, env={**self.env, "INFRACOST_BINARY": binary or self.binaries[arch]}, capture_output=True)
+    def check(self, bundle, arch="arm64", binary=None, opentofu_binary=None):
+        return subprocess.run([str(self.checker), str(bundle), str(ROOT), arch], cwd=ROOT, env={**self.env, "INFRACOST_BINARY": binary or self.binaries[arch], "OPENTOFU_BINARY": opentofu_binary or self.opentofu_binaries[arch]}, capture_output=True)
 
     def final(self, bundle, arch="arm64"):
-        return subprocess.run(["sh", "scripts/validate-notices.sh", str(bundle)], cwd=ROOT, env={**self.env, "INFRACOST_BINARY": self.binaries[arch]}, capture_output=True)
+        return subprocess.run(["sh", "scripts/validate-notices.sh", str(bundle)], cwd=ROOT, env={**self.env, "INFRACOST_BINARY": self.binaries[arch], "OPENTOFU_BINARY": self.opentofu_binaries[arch]}, capture_output=True)
 
     def rehash(self, bundle):
         rows = []
@@ -71,19 +75,21 @@ class Notices(unittest.TestCase):
 
     def test_actual_wrong_architecture_executable_is_rejected(self):
         self.assertNotEqual(self.check(self.work / "arm64", "arm64", self.binaries["amd64"]).returncode, 0)
+        self.assertNotEqual(self.check(self.work / "arm64", opentofu_binary=self.opentofu_binaries["amd64"]).returncode, 0)
 
     def test_corresponding_source_cannot_be_omitted_or_emptied(self):
-        for missing in (False, True):
-            with self.subTest(missing=missing):
-                bundle = self.copy()
-                archive = bundle / "infracost/corresponding-source.tar.gz"
-                if missing:
-                    archive.unlink()
-                else:
-                    archive.write_bytes(b"")
-                self.rehash(bundle)
-                self.assertNotEqual(self.check(bundle).returncode, 0)
-                self.assertNotEqual(self.final(bundle).returncode, 0)
+        for vendor in ("infracost", "opentofu"):
+            for missing in (False, True):
+                with self.subTest(vendor=vendor, missing=missing):
+                    bundle = self.copy()
+                    archive = bundle / vendor / "corresponding-source.tar.gz"
+                    if missing:
+                        archive.unlink()
+                    else:
+                        archive.write_bytes(b"")
+                    self.rehash(bundle)
+                    self.assertNotEqual(self.check(bundle).returncode, 0)
+                    self.assertNotEqual(self.final(bundle).returncode, 0)
 
     def test_actual_final_copy_rejects_corruption_missing_extra_and_links(self):
         for kind in ("corrupt", "missing", "extra", "link"):
@@ -122,15 +128,17 @@ class Notices(unittest.TestCase):
                 self.assertNotEqual(self.check(bundle).returncode, 0)
 
     def test_source_vendor_notices_reject_rehashed_tampering(self):
-        for name in ("LICENSE", "SOURCE.json", "infracost.spdx.json", "modules.txt", "buildinfo.txt"):
-            with self.subTest(name=name):
-                bundle = self.copy()
-                (bundle / "infracost" / name).write_text("changed")
-                self.assertNotEqual(self.final(bundle).returncode, 0)
-                self.rehash(bundle)
-                self.assertNotEqual(self.check(bundle).returncode, 0)
-                if name in ("LICENSE", "SOURCE.json"):
+        for vendor, names in (("infracost", ("LICENSE", "SOURCE.json", "infracost.spdx.json", "modules.txt", "buildinfo.txt", "corresponding-source.tar.gz")),
+                              ("opentofu", ("LICENSE", "SOURCE.json", "modules.txt", "buildinfo.txt", "build/BUILD.json", "corresponding-source.tar.gz", "dependencies/github.com/jmespath/go-jmespath/LICENSE", "dependencies/github.com/jmespath/go-jmespath/APACHE-2.0.txt"))):
+            for name in names:
+                with self.subTest(vendor=vendor, name=name):
+                    bundle = self.copy()
+                    (bundle / vendor / name).write_text("changed")
                     self.assertNotEqual(self.final(bundle).returncode, 0)
+                    self.rehash(bundle)
+                    self.assertNotEqual(self.check(bundle).returncode, 0)
+                    if name in ("LICENSE", "SOURCE.json", "corresponding-source.tar.gz", "dependencies/github.com/jmespath/go-jmespath/LICENSE", "dependencies/github.com/jmespath/go-jmespath/APACHE-2.0.txt"):
+                        self.assertNotEqual(self.final(bundle).returncode, 0)
 
     def test_real_closure_rejects_missing_dependency_wrong_graph_and_target(self):
         for kind in ("dependency", "graph", "target", "application", "vendor-source"):

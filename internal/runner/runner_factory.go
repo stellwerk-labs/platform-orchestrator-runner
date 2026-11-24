@@ -19,7 +19,7 @@ func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (R
 		return nil, err
 	}
 	switch cfg.Mode {
-	case config.Deploy, config.Destroy, config.PlanOnly:
+	case config.Deploy, config.Destroy, config.PlanOnly, config.ApplyRetained:
 	default:
 		return nil, errors.New("unsupported runner mode")
 	}
@@ -35,7 +35,7 @@ func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (R
 		recipient:             recipient,
 		tool:                  string(cfg.IaCBackend),
 		observationOnly:       cfg.IsObservation(),
-		costEstimationEnabled: cfg.CostEstimationEnabled,
+		costEstimationEnabled: cfg.CostEstimationEnabled && !cfg.RetainPlan,
 		infracostAPIKey:       cfg.InfracostAPIKey,
 	}
 	client, err := gatewayapi.NewClient(gatewayapi.ClientConfig{
@@ -46,16 +46,12 @@ func CreateRunner(ctx context.Context, cfg *config.StandardModeConfiguration) (R
 	if err != nil {
 		return nil, err
 	}
+	base.keyLoader = func(ctx context.Context) (string, error) {
+		return client.GetRetainedPlanKey(ctx, cfg.DeploymentID, cfg.DeploymentToken)
+	}
 	base.bundleLoader = func(ctx context.Context) ([]byte, error) {
 		return client.GetBundle(ctx, cfg.DeploymentID, cfg.DeploymentToken)
 	}
 
-	switch cfg.IaCBackend {
-	case config.BackendTerraform:
-		return newTerraformRunner(base), nil
-	case config.BackendOpenTofu:
-		return newOpenTofuRunner(base), nil
-	default:
-		return nil, errors.New("unsupported IaC backend")
-	}
+	return newIaCRunner(base, cfg.IaCBackend)
 }

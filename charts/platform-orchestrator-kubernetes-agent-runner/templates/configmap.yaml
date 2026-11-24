@@ -1,3 +1,4 @@
+{{- if eq .Values.executionMode "remote" -}}
 {{- if not (has .Values.gateway.mode (list "simple" "edge" "airgap")) -}}{{- fail "gateway.mode must be simple, edge, or airgap" -}}{{- end -}}
 {{- $configured := or .Values.platformOrchestrator.orgId .Values.platformOrchestrator.runnerId -}}
 {{- if and $configured (not (and .Values.platformOrchestrator.orgId .Values.platformOrchestrator.runnerId)) -}}{{- fail "platformOrchestrator.orgId and platformOrchestrator.runnerId must be configured together" -}}{{- end -}}
@@ -29,3 +30,4 @@ data:
   {{- if .Values.outbox.enabled }}
   RUNNER_GATEWAY_JOB_OUTBOX_PVC: {{ printf "%s-job-outbox" (include "platform-orchestrator-kubernetes-agent-runner.fullname" .) | quote }}
   {{- end }}
+{{- end }}

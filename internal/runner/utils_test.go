@@ -4,6 +4,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -26,6 +30,42 @@ func TestUnarchiveBundleRejectsEntriesOutsideDestination(t *testing.T) {
 
 			err = unarchiveBundleToFolder(bundle.Bytes(), t.TempDir())
 			require.ErrorContains(t, err, "escapes destination")
+		})
+	}
+}
+
+func TestLegacyRunCmdPreservesCombinedOutputAndExitStatus(t *testing.T) {
+	for _, test := range []struct {
+		name, script string
+		code         int
+		cancel       bool
+	}{
+		{"success", "exit 0", 0, false},
+		{"nonzero", "exit 7", 7, false},
+		{"canceled", `trap '' INT; (sleep 1; touch "$1") & wait`, -1, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := t.Context()
+			if test.cancel {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+				defer cancel()
+			}
+			late := filepath.Join(t.TempDir(), "late-child")
+			output, err := runCmd(ctx, "/bin/sh", "-c", "printf stdout; printf stderr >&2; "+test.script, "sh", late)
+			require.Equal(t, "stdoutstderr", output)
+			if test.code == 0 {
+				require.NoError(t, err)
+			} else {
+				var exit *exec.ExitError
+				require.True(t, errors.As(err, &exit))
+				require.Equal(t, test.code, exit.ExitCode())
+				require.Equal(t, output+": "+exit.Error(), err.Error())
+			}
+			if test.cancel {
+				time.Sleep(800 * time.Millisecond)
+				require.NoFileExists(t, late, "legacy command cancellation left a live child")
+			}
 		})
 	}
 }

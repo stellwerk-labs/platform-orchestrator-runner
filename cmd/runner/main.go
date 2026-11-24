@@ -36,6 +36,7 @@ type LogsUploader func(ctx context.Context, logsBuffer bytes.Buffer) error
 const (
 	StandardMode      = "standard"
 	RemoteMode        = "remote"
+	RolloutMode       = "rollout"
 	DiodeExportMode   = "diode-export"
 	DiodeImportMode   = "diode-import"
 	OutboxFlushMode   = "outbox-flush"
@@ -75,10 +76,13 @@ func main() {
 
 func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.LimitedLogsBuffer) (LogsUploader, error) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})))
-	slog.InfoContext(ctx, "Starting", "app", path.Base(buildInfo.Main.Path), "version", buildInfo.Main.Version)
 
 	// Define and parse flags
 	flag.StringVar(&gatewayURL, "gateway-url", "", "HTTPS runner gateway endpoint")
+	flag.BoolVar(&rolloutControlWait, "wait", false, "Wait for rollout-drain to finish admitted stages")
+	flag.DurationVar(&rolloutControlTimeout, "timeout", 30*time.Second, "Local rollout control deadline")
+	flag.StringVar(&rolloutCatalogueExpected, "expected-catalogue", "", "Expected current Native catalogue digest for offline maintenance")
+	flag.StringVar(&rolloutCatalogueAdminDSN, "admin-dsn-file", "", "Private schema-owner DSN file for offline catalogue maintenance")
 	flag.Parse()
 
 	// Get positional arguments after flags
@@ -94,6 +98,18 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 		return nil, errors.Errorf("invalid number of positional arguments, expected 0 or 1, got %d", len(args))
 	}
 
+	if mode == "rollout-catalogue-update" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
+		return nil, updateRolloutCatalogue(ctx)
+	}
+	if mode == "rollout-catalogue" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
+		return nil, exportRolloutCatalogue()
+	}
+	if mode == "rollout-status" || mode == "rollout-ready" || mode == "rollout-drain" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
+	}
+	slog.InfoContext(ctx, "Starting", "app", path.Base(buildInfo.Main.Path), "version", buildInfo.Main.Version)
 	switch mode {
 	case StandardMode:
 		if gatewayURL != "" {
@@ -115,6 +131,10 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 		} else {
 			return logsUploader, nil
 		}
+	case "rollout-storage-init":
+		return nil, initializeRolloutStorage(ctx)
+	case RolloutMode, "rollout-status", "rollout-ready", "rollout-drain":
+		return nil, runRolloutMode(ctx, mode)
 	case RemoteMode:
 		if cfg, err := config.GetRemoteModeConfiguration(gatewayURL); err != nil {
 			return nil, errors.Wrap(err, "failed to read remote mode config")
@@ -155,6 +175,9 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 }
 
 func runGateway(ctx context.Context, cfg *config.GatewayModeConfiguration) error {
+	if err := cfg.ValidateDirectAccess(); err != nil {
+		return err
+	}
 	connection, err := natstransport.Connect(natsConfig(cfg.NATS, "platform-orchestrator-runner-gateway"))
 	if err != nil {
 		return err
@@ -168,7 +191,7 @@ func runGateway(ctx context.Context, cfg *config.GatewayModeConfiguration) error
 	if cfg.ControlPlaneURL != "" {
 		publicKeys, err = gateway.NewControlPlanePublicKeyResolver(cfg.ControlPlaneURL, nil, cfg.PublicKeyCacheTTL)
 	} else {
-		publicKeys, err = gateway.NewStaticPublicKeyResolver(cfg.StaticOrganizationID, cfg.StaticRunnerID, cfg.StaticPublicKeyFile)
+		publicKeys, err = gateway.NewStaticPublicKeyResolver(cfg.StaticOrganizationID, cfg.StaticRunnerID, cfg.StaticPublicKeyFile, cfg.StaticRunnerUUID)
 	}
 	if err != nil {
 		return err
@@ -178,9 +201,10 @@ func runGateway(ctx context.Context, cfg *config.GatewayModeConfiguration) error
 		return err
 	}
 	handler, err := gateway.NewServer(gateway.ServerConfig{
+		DeploymentAuthorityDPURL: cfg.DeploymentAuthorityDPURL, DisableDirectDeployments: cfg.StaticRunnerUUID != "",
 		BasePath: cfg.BasePath, Backend: backend, PublicKeys: publicKeys,
 		ReceiptKey: receiptKey, RunnerTokenSalt: cfg.RunnerTokenSalt,
-		FetchWait: cfg.FetchWait, MaxLogBytes: cfg.MaxLogBytes,
+		FetchWait: cfg.FetchWait, MaxLogBytes: cfg.MaxLogBytes, RetainedPlansEnabled: cfg.RetainedPlansEnabled, RetainedPlanDPURL: cfg.RetainedPlanDPURL,
 	})
 	if err != nil {
 		return err

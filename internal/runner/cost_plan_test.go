@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -65,4 +69,32 @@ func TestInfrastructureCommandsCannotInheritInfracostKey(t *testing.T) {
 	observed, err := r.observationCommand(t.Context(), 1<<20)
 	require.NoError(t, err)
 	require.NotContains(t, string(observed), "INFRACOST_API_KEY")
+}
+
+func TestInfracostCancellationCleansDescendantsBeforePrivateDirectory(t *testing.T) {
+	root := t.TempDir()
+	late, started := filepath.Join(root, "late-child"), filepath.Join(root, "plan-path")
+	binary := filepath.Join(root, "estimator")
+	script := fmt.Sprintf(`#!/bin/sh
+[ "$INFRACOST_API_KEY" = PRIVATE_ESTIMATOR_KEY ] || exit 2
+[ -z "$PRIVATE_AMBIENT_SETTING" ] || exit 3
+printf '%%s' "$3" > %q
+printf PRIVATE_ESTIMATOR_STDERR >&2
+printf PRIVATE_ESTIMATOR_STDOUT
+trap '' INT
+(/bin/sleep 3; /usr/bin/touch %q) & wait
+`, started, late)
+	require.NoError(t, os.WriteFile(binary, []byte(script), 0700))
+	t.Setenv("PRIVATE_AMBIENT_SETTING", "must-not-reach-estimator")
+	r := baseRunner{costBinary: binary, infracostAPIKey: "PRIVATE_ESTIMATOR_KEY"}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	data, reason := r.runInfracost(ctx, []byte(`{"PRIVATE_PLAN":"secret"}`))
+	require.Equal(t, "estimator_unavailable", reason)
+	require.Nil(t, data)
+	plan, err := os.ReadFile(started)
+	require.NoError(t, err, "the real estimator must have started")
+	require.NoDirExists(t, filepath.Dir(string(plan)), "private estimator directory was not removed")
+	time.Sleep(2 * time.Second)
+	require.NoFileExists(t, late, "estimator descendant survived context cancellation")
 }

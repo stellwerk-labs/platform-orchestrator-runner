@@ -1,3 +1,17 @@
+# Native mode requires a coordinated, qualified Native Runner image.
+executionMode: remote
+native:
+  replicas: 2
+  configExistingSecret: ""
+  configKey: rollout.json
+  privateFilesExistingSecret: ""
+  # Maximum admitted Apply (86400s) plus bounded cleanup and scheduling margin.
+  terminationGracePeriodSeconds: 86520
+  initialization:
+    enabled: false
+    configExistingSecret: ""
+    privateFilesExistingSecret: ""
+
 # Default values for platform-orchestrator-kubernetes-agent-runner.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -69,6 +83,7 @@ protectedNatsBootstrap:
   image: natsio/nats-box:0.19.5
 
 airgap:
+  runnerUuid: ""
   # Existing Secret in the runner namespace. The public key must match the
   # private key used by the agent. runnerTokenSalt must match the central data
   # plane so protected deployment jobs can authenticate their result uploads.
