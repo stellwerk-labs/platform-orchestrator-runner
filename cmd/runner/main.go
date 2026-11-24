@@ -155,6 +155,7 @@ func mainInner(ctx context.Context, limitedLogsBuffer *limitedlogsbuffer.Limited
 			ProcessedDir: os.Getenv("DIODE_PROCESSED_DIR"), LedgerPath: os.Getenv("DIODE_LEDGER_PATH"),
 			QuarantineDir: os.Getenv("DIODE_QUARANTINE_DIR"), VerifyKey: os.Getenv("DIODE_VERIFY_KEY_FILE"),
 			ExpectedAttachment: os.Getenv("DIODE_EXPECT_ATTACHMENT"),
+			AuthoritativeOrg:   os.Getenv("DIODE_AUTHORITATIVE_ORG"), NativeRunnerUUID: os.Getenv("DIODE_NATIVE_RUNNER_UUID"),
 		})
 	case OutboxFlushMode:
 		cfg, err := config.GetOutboxModeConfiguration()

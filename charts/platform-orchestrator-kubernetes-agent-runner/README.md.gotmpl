@@ -87,6 +87,16 @@ boundary through an approved secret-transfer procedure. Configure the diode
 relay resources separately for both directions. This mode is not qualified
 with a physical diode by the chart test suite.
 
+Native diode relays require `executionMode: native`, `platformOrchestrator.orgId`
+and canonical nonzero `airgap.runnerUuid`. The existing Native branch derives the
+`0-<UUID>` command/event routes and binds the central reverse importer to that
+organization/UUID and the provisioned site verification key. Both Native exporter
+durable names include that organization/UUID; remote durable names are unchanged. A supplied
+`diode.commandSubject` must equal the derived route. Remote mode retains its trusted
+legacy contract. See [Native diode ingress](../../docs/native-diode-ingress.md) for
+required launch settings, central-only broker access, the existing-exporter
+controlled cutover and the qualification limit.
+
 {{ template "chart.requirementsSection" . }}
 
 {{ template "chart.valuesSection" . }}

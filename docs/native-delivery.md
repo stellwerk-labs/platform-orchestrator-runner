@@ -172,3 +172,9 @@ legacy behavior remains available in its legacy-only realm. Arbitrary shared mix
 offline legacy/Native object access is not qualified by this configuration, and no
 live state or key migration is implied. Native producer activation still requires
 actual Core/IAM enrollment, frozen target and complete deployment qualification.
+
+
+For shared central reverse file/diode ingress, use the required centrally bound
+[Native diode importer](native-diode-ingress.md). Unbound generic relays trust their
+verification-key holder to choose broker subjects, message IDs and headers and must
+not receive customer-controlled Native reverse frames on the shared stream.

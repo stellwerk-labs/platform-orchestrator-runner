@@ -83,6 +83,7 @@ protectedNatsBootstrap:
   image: natsio/nats-box:0.19.5
 
 airgap:
+  # Required canonical nonzero registration UUID for Native Gateway/diode routes.
   runnerUuid: ""
   # Existing Secret in the runner namespace. The public key must match the
   # private key used by the agent. runnerTokenSalt must match the central data
@@ -112,6 +113,7 @@ diode:
   signingKey: signing-key.pem
   verificationKeyExistingSecret: ""
   verificationKey: verification-key.pem
+  # Remote central role requires this; Native derives it and rejects a mismatch.
   commandSubject: ""
 
 replicaCount: 1

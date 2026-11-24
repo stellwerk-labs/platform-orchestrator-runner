@@ -50,6 +50,8 @@ type ImportConfig struct {
 	PollInterval       time.Duration
 	MaxAttachmentBytes int64
 	ExpectedAttachment string
+	AuthoritativeOrg   string
+	NativeRunnerUUID   string
 }
 
 type Attachment struct {
@@ -134,6 +136,9 @@ func RunExporter(ctx context.Context, config ExportConfig) error {
 }
 
 func RunImporter(ctx context.Context, config ImportConfig) error {
+	if err := validateNativeReverseConfig(config); err != nil {
+		return err
+	}
 	paths := []string{config.InputDir, config.ProcessedDir, config.LedgerPath, config.VerifyKey}
 	if config.QuarantineDir != "" {
 		paths = append(paths, config.QuarantineDir)
@@ -191,6 +196,9 @@ func RunImporter(ctx context.Context, config ImportConfig) error {
 }
 
 func importAvailable(ctx context.Context, config ImportConfig, publicKey ed25519.PublicKey, connection *nats.Conn, publisher *natstransport.Publisher, processed map[string]struct{}) error {
+	if err := validateNativeReverseConfig(config); err != nil {
+		return err
+	}
 	if config.MaxAttachmentBytes <= 0 {
 		config.MaxAttachmentBytes = 16 * 1024 * 1024
 	}
@@ -237,6 +245,13 @@ func importAvailable(ctx context.Context, config ImportConfig, publicKey ed25519
 			}
 			continue
 		}
+		message, err := canonicalImportedMessage(config, frame.Message)
+		if err != nil {
+			if quarantineErr := quarantine(config, path, entry.Name(), err); quarantineErr != nil {
+				return quarantineErr
+			}
+			continue
+		}
 		if err := validateAttachmentInvariant(config.ExpectedAttachment, frame.Message, frame.Attachment); err != nil {
 			if quarantineErr := quarantine(config, path, entry.Name(), err); quarantineErr != nil {
 				return quarantineErr
@@ -254,14 +269,14 @@ func importAvailable(ctx context.Context, config ImportConfig, publicKey ed25519
 				return err
 			}
 		}
-		if _, exists := processed[frame.Message.ID]; !exists {
-			if err := publisher.Publish(ctx, frame.Message); err != nil {
+		if _, exists := processed[message.ID]; !exists {
+			if err := publisher.Publish(ctx, message); err != nil {
 				return err
 			}
-			if err := appendProcessed(config.LedgerPath, frame.Message.ID); err != nil {
+			if err := appendProcessed(config.LedgerPath, message.ID); err != nil {
 				return err
 			}
-			processed[frame.Message.ID] = struct{}{}
+			processed[message.ID] = struct{}{}
 		}
 		if err := moveDurably(path, filepath.Join(config.ProcessedDir, entry.Name())); err != nil {
 			return err

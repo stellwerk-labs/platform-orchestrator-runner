@@ -28,4 +28,4 @@ export AGENT_DELIVERY_NATS_CONTAINER="$container"
 export AGENT_DELIVERY_ISOLATED=1
 # Agent qualification deliberately restarts this broker. Finish each package
 # before the next so transport-only tests cannot race that owned fault.
-GOWORK=off go test -race -p 1 -tags=integration ./internal/rolloutagent ./internal/gateway ./internal/natstransport ./internal/diode -run '^(TestAgent|TestNativeGateway|TestNativeConsumer|TestNativeControlResultSignedFileCarrierPreservesExactBytes$)' -count=1 -timeout=230s -v
+GOWORK=off go test -race -p 1 -tags=integration ./internal/rolloutagent ./internal/gateway ./internal/natstransport ./internal/diode -run '^(TestAgent|TestNativeGateway|TestNativeConsumer|TestNativeControlResultSignedFileCarrierPreservesExactBytes$|TestNativeReverseSharedIngressSiteBinding$|TestNativeReverseOversizeControlDoesNotReserveIdentity$|TestNativeLogSignedExportImportAndReplay$)' -count=1 -timeout=230s -v

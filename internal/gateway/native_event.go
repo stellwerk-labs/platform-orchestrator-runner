@@ -9,6 +9,12 @@ import (
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/nativelogs"
 )
 
+// ValidNativeEventIdentity shares the connected Gateway identity rules with
+// the bound file importer. Callers must first validate raw JSON and site scope.
+func ValidNativeEventIdentity(event hmessaging.EventEnvelope) bool {
+	return validNativeEventIdentity(event)
+}
+
 // Bind before Publish: a rejected event must not consume another completion's
 // stream-wide deduplication identity.
 func validNativeEventIdentity(event hmessaging.EventEnvelope) bool {

@@ -3,7 +3,21 @@
 {{- if not .Values.diode.existingClaim }}{{ fail "diode.existingClaim is required when diode.enabled=true" }}{{ end }}
 {{- if not .Values.diode.signingKeyExistingSecret }}{{ fail "diode.signingKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
 {{- if not .Values.diode.verificationKeyExistingSecret }}{{ fail "diode.verificationKeyExistingSecret is required when diode.enabled=true" }}{{ end }}
-{{- if and (eq .Values.diode.role "central") (not .Values.diode.commandSubject) }}{{ fail "diode.commandSubject must be the exact airgap runner command subject when diode.role=central" }}{{ end }}
+{{- $transportRunnerID := .Values.platformOrchestrator.runnerId }}
+{{- $commandSubject := .Values.diode.commandSubject }}
+{{- $forwardDurable := "diode-forward-commands" }}
+{{- $reverseDurable := "diode-reverse-events" }}
+{{- if eq .Values.executionMode "native" }}
+{{- if or (not (regexMatch "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" .Values.airgap.runnerUuid)) (eq .Values.airgap.runnerUuid "00000000-0000-0000-0000-000000000000") }}{{ fail "Native diode requires canonical nonzero airgap.runnerUuid" }}{{ end }}
+{{- if not (regexMatch "^[A-Za-z0-9_-]{1,128}$" .Values.platformOrchestrator.orgId) }}{{ fail "Native diode requires platformOrchestrator.orgId as an organization subject token" }}{{ end }}
+{{- $transportRunnerID = printf "0-%s" .Values.airgap.runnerUuid }}
+{{- $forwardDurable = printf "diode-forward-commands-%s-%s" .Values.platformOrchestrator.orgId .Values.airgap.runnerUuid }}
+{{- $reverseDurable = printf "diode-reverse-events-%s-%s" .Values.platformOrchestrator.orgId .Values.airgap.runnerUuid }}
+{{- $nativeCommandSubject := printf "po.v1.orgs.%s.runners.%s.commands" .Values.platformOrchestrator.orgId $transportRunnerID }}
+{{- if and $commandSubject (ne $commandSubject $nativeCommandSubject) }}{{ fail "Native diode.commandSubject must match the configured organization and UUID route" }}{{ end }}
+{{- $commandSubject = $nativeCommandSubject }}
+{{- end }}
+{{- if and (eq .Values.diode.role "central") (not $commandSubject) }}{{ fail "diode.commandSubject must be the exact airgap runner command subject when diode.role=central" }}{{ end }}
 {{- $natsURL := .Values.airgap.nats.url }}
 {{- if and (eq .Values.diode.role "protected") (index .Values "protected-nats" "enabled") (not $natsURL) }}
 {{- $natsURL = printf "nats://%s-protected-nats:4222" .Release.Name }}
@@ -55,8 +69,8 @@ spec:
           env:
             - {name: NATS_URL, value: {{ $natsURL | quote }}}
             - {name: DIODE_STREAM, value: PO_RUNNER_EVENTS}
-            - {name: DIODE_SUBJECT, value: {{ printf "po.v1.orgs.%s.runners.%s.events.>" .Values.platformOrchestrator.orgId .Values.platformOrchestrator.runnerId | quote }} }
-            - {name: DIODE_DURABLE, value: diode-reverse-events}
+            - {name: DIODE_SUBJECT, value: {{ printf "po.v1.orgs.%s.runners.%s.events.>" .Values.platformOrchestrator.orgId $transportRunnerID | quote }} }
+            - {name: DIODE_DURABLE, value: {{ $reverseDurable | quote }}}
             - {name: DIODE_OUTPUT_DIR, value: /diode/reverse/out}
             - {name: DIODE_LEDGER_PATH, value: /diode/reverse/events.ledger}
             - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
@@ -71,8 +85,8 @@ spec:
           env:
             - {name: NATS_URL, value: {{ $natsURL | quote }}}
             - {name: DIODE_STREAM, value: PO_RUNNER_COMMANDS}
-            - {name: DIODE_SUBJECT, value: {{ .Values.diode.commandSubject | quote }} }
-            - {name: DIODE_DURABLE, value: diode-forward-commands}
+            - {name: DIODE_SUBJECT, value: {{ $commandSubject | quote }} }
+            - {name: DIODE_DURABLE, value: {{ $forwardDurable | quote }}}
             - {name: DIODE_OUTPUT_DIR, value: /diode/forward/out}
             - {name: DIODE_LEDGER_PATH, value: /diode/forward/commands.ledger}
             - {name: DIODE_SIGNING_KEY_FILE, value: /keys/sign/key.pem}
@@ -92,6 +106,10 @@ spec:
             - {name: DIODE_LEDGER_PATH, value: /diode/reverse/imported.ledger}
             - {name: DIODE_VERIFY_KEY_FILE, value: /keys/verify/key.pem}
             - {name: DIODE_EXPECT_ATTACHMENT, value: log}
+            {{- if eq .Values.executionMode "native" }}
+            - {name: DIODE_AUTHORITATIVE_ORG, value: {{ .Values.platformOrchestrator.orgId | quote }}}
+            - {name: DIODE_NATIVE_RUNNER_UUID, value: {{ .Values.airgap.runnerUuid | quote }}}
+            {{- end }}
             {{- include "platform-orchestrator-kubernetes-agent-runner.protectedNatsEnv" . | nindent 12 }}
           {{- include "platform-orchestrator-kubernetes-agent-runner.diodeMounts" . | nindent 10 }}
         {{- end }}
