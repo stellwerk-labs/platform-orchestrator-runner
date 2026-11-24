@@ -35,3 +35,7 @@ Prepared the Native pipeline application source export. Public artifact publicat
 
 Bound Native reverse imports to the configured organization and runner identity before attachment, ledger or publish effects. Native control results enforce the same 8 KiB envelope limit as their consumers. Helm routes and exporter consumers use the bound identity; the documented cutover preserves queued data.
 Focused real-NATS regression checks, the ordinary unit suite, vet, lint and Helm template checks passed. Independent source reviews passed. Updated image qualification and public publication remain separate steps.
+
+## 2026-11-24: Runner chart release candidate
+
+Prepared chart `0.5.0-rc.1` metadata, packaged README, tag notes and the conditional GitHub prerelease argument. The local release contracts, chart metadata, Helm render and package checks passed with Bash `5.3.20` and Helm `4.3.2`. The hosted producer pins Helm `4.3.0`; its publication checks remain separate. The unchanged Go native wrapper was not rerun.

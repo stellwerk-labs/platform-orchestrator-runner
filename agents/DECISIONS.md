@@ -27,3 +27,7 @@ Patch maintenance is an explicit build obligation, not an unmodified-vendor clai
 ## Native pipeline source export
 
 Prepare Native pipeline application changes as a source export with all product code, tests, documentation and release controls retained.
+
+## 2026-11-24: Runner chart release candidate
+
+Chart `0.5.0-rc.1` selects Runner `v3.4.0-rc.1` through `appVersion`. Tag-triggered GitHub releases derive `--prerelease` from the final chart version and keep `--latest=false`.

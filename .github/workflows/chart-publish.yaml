@@ -64,11 +64,16 @@ jobs:
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_VERSION: ${{ steps.get_name_version.outputs.VERSION }}
         run: |
           set -euo pipefail
-          filename="${{ steps.get_name_version.outputs.NAME }}-${{ steps.get_name_version.outputs.VERSION }}.tgz"
+          filename="${{ steps.get_name_version.outputs.NAME }}-${CHART_VERSION}.tgz"
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           test -f "$notes"
+          prerelease=()
+          if [[ "$CHART_VERSION" == *-* ]]; then
+            prerelease+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" "$filename" \
-            --verify-tag --latest=false \
+            --verify-tag --latest=false "${prerelease[@]}" \
             --notes-file "$notes"

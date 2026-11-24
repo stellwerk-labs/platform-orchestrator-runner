@@ -3,9 +3,9 @@ import importlib.util
 import os
 from pathlib import Path
 import re
-import shlex
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("candidate-release.py"))
@@ -15,18 +15,50 @@ SHA = "a" * 40
 
 
 class CandidateReleaseTests(unittest.TestCase):
-    def test_chart_release_does_not_replace_runner_latest(self):
+    def test_chart_release_sets_prerelease_without_replacing_runner_latest(self):
         text = Path(__file__).parents[1].joinpath(".github/workflows/chart-publish.yaml").read_text()
         step = text.split("      - name: Create GitHub release\n", 1)[1]
         self.assertIn("if: github.event_name == 'push'", step)
-        lines = step.replace("\\\n", " ").splitlines()
-        commands = [shlex.split(line.strip()) for line in lines if line.strip().startswith("gh release create ")]
-        self.assertEqual(len(commands), 1)
-        command = commands[0]
-        self.assertEqual(command[:5], ["gh", "release", "create", "$GITHUB_REF_NAME", "$filename"])
-        self.assertIn("--verify-tag", command)
-        self.assertEqual([arg for arg in command if arg.startswith("--latest")], ["--latest=false"])
-        self.assertEqual(command[command.index("--notes-file") + 1], "$notes")
+        self.assertIn("CHART_VERSION: ${{ steps.get_name_version.outputs.VERSION }}", step)
+        run = re.search(r"^        run: \|\n((?:^          .*\n|^\n)+)", step, re.MULTILINE)
+        self.assertIsNotNone(run)
+
+        chart = "platform-orchestrator-kubernetes-agent-runner"
+        script = textwrap.dedent(run.group(1)).replace("${{ steps.get_name_version.outputs.NAME }}", chart)
+        self.assertNotIn("${{", script)
+        script = 'PATH=/dev/null\ngh() { printf "%s\\0" "$@"; }\n' + script
+
+        with tempfile.TemporaryDirectory() as directory:
+            releases = Path(directory) / "docs/releases"
+            releases.mkdir(parents=True)
+            for version, extra_args in (
+                ("0.5.0", []),
+                ("0.5.0-rc.1", ["--prerelease"]),
+                ("0.5.0-beta", ["--prerelease"]),
+            ):
+                with self.subTest(version=version):
+                    tag = f"chart-v{version}"
+                    notes = releases / f"{tag}.md"
+                    notes.write_text("Chart release notes.\n")
+                    result = subprocess.run(
+                        ["bash", "--noprofile", "--norc", "-c", script],
+                        cwd=directory,
+                        env={
+                            "PATH": os.environ.get("PATH", os.defpath),
+                            "HOME": directory,
+                            "CHART_VERSION": version,
+                            "GITHUB_REF_NAME": tag,
+                        },
+                        capture_output=True,
+                        check=True,
+                        timeout=5,
+                    )
+                    expected = [
+                        "release", "create", tag, f"{chart}-{version}.tgz",
+                        "--verify-tag", "--latest=false", *extra_args,
+                        "--notes-file", notes.relative_to(directory).as_posix(),
+                    ]
+                    self.assertEqual(result.stdout, ("\0".join(expected) + "\0").encode())
 
     def test_canonical_candidate_and_exact_commit(self):
         for tag in ("v3.1.0-rc.1", "v3.1.0-rc.12", "v0.7.0-rc.1"):

@@ -21,3 +21,7 @@ Some dependencies carry their complete copyright/licence notice inline rather th
 ## Native pipeline source export
 
 Keep the released application source and its public SDK contracts aligned; preserve existing compatibility exports.
+
+## 2026-11-24: Runner chart release candidate
+
+Run the actual workflow Bash when checking release arguments. A local `gh` argument recorder captures stable, RC and beta command lines without contacting GitHub.
