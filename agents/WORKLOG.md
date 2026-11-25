@@ -51,3 +51,7 @@ See DECISIONS.md and LEARNINGS.md for scope and documentation maintenance guidan
 ### Correct regular-file test fixtures
 
 Updated the existing protocol fixture to retain an installed regular shell or privately copy a final-component shell alias, and the catalogue secrecy fixture to use the canonical echo path. Existing protocol, digest, confinement, cancellation and private-environment assertions are retained. No production, dependency, workflow or runtime behavior changes. See DECISIONS.md and LEARNINGS.md.
+
+### Prepare Runner and chart RC2 metadata
+
+Prepared forward application and chart candidate notes, README references and chart version/appVersion for the reviewed portable test fixtures. Existing candidate notes, runtime, dependencies, templates and activation defaults remain unchanged.

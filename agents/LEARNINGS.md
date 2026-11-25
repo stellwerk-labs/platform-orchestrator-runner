@@ -36,3 +36,7 @@ dynamic schemas, examples and imports.
 ### Distribution aliases are not approved executable fixtures
 
 Standard shell and echo paths can be final-component symlinks. A fixture which hashes their targets but supplies the aliases contradicts the regular-file execution contract. Retain already regular installed executables. When a final-component alias requires a copy, real shell bytes under their shell basename preserve behavior without a mock or an operating-system branch.
+
+### Treat the chart default image as release metadata
+
+A forward Runner candidate also needs an explicitly aligned chart appVersion, candidate version and installation examples. This changes version selection rather than Native activation or workload behavior.

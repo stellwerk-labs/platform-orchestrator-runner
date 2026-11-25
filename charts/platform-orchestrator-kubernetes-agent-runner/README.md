@@ -12,7 +12,7 @@ kubectl create secret generic runner-identity \
   --from-file=private-key.pem=runner_private_key.pem
 
 helm install runner oci://ghcr.io/stellwerk-labs/charts/platform-orchestrator-kubernetes-agent-runner \
-  --version 0.5.0-rc.1 \
+  --version 0.5.0-rc.2 \
   --set platformOrchestrator.orgId=my-org \
   --set platformOrchestrator.runnerId=my-runner \
   --set gateway.url=https://api.example.com/runner-gateway \
@@ -22,7 +22,7 @@ helm install runner oci://ghcr.io/stellwerk-labs/charts/platform-orchestrator-ku
 The matching public key must be registered in the Orchestrator's
 `kubernetes-agent` runner configuration.
 
-Chart `0.5.0-rc.1` defaults to the Runner `v3.4.0-rc.1` image through
+Chart `0.5.0-rc.2` defaults to the Runner `v3.4.0-rc.2` image through
 `Chart.appVersion`. The empty `image.tag` default selects that version; an
 explicit `image.repository` or `image.tag` remains an operator override.
 Publish this chart only after the matching Runner release-candidate image is qualified.
@@ -147,7 +147,7 @@ controlled cutover and the qualification limit.
 | gateway.url | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/stellwerk-labs/platform-orchestrator-runner"` |  |
-| image.tag | string | `""` | Defaults to chart appVersion `v3.4.0-rc.1`; set explicitly to override. |
+| image.tag | string | `""` | Defaults to chart appVersion `v3.4.0-rc.2`; set explicitly to override. |
 | imagePullSecrets | list | `[]` |  |
 | jobsRbac.create | bool | `true` |  |
 | jobsRbac.namespace | string | `""` |  |

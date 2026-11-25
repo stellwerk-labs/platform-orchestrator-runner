@@ -42,3 +42,7 @@ and does not invalidate the existing functional qualification.
 ### Use actual regular executables in protocol fixtures
 
 Keep approved-tool validation strict about regular files and frozen digests. Retain an already regular installed shell; copy only a final-component shell symlink into the existing owned test directory under basename sh. This preserves real shell behavior, including multicall dispatch, without unnecessarily relocating system executables. Resolve the catalogue-only echo fixture before hashing it. Production execution and confinement policies remain unchanged.
+
+### Align forward Runner and chart candidate metadata
+
+A correction after a reserved application candidate receives a forward version. Keep the chart candidate and its default image version aligned with the corrected Runner. Preserve previous notes and tags.
