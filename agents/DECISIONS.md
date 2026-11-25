@@ -50,3 +50,7 @@ A correction after a reserved application candidate receives a forward version. 
 ### Check final PostgreSQL TCP readiness in the HA fixture
 
 The HA bootstrap must wait for the final TCP server rather than the temporary Unix-only initialization server. Keep the existing bounded probe and cleanup, adding only its loopback host. Allow the existing cold OpenTofu setup and backend E2E outer steps 10 minutes each without changing the Native job cap, actual Go-test deadline or checkout. The complete PostgreSQL selector has a 15-minute aggregate in both existing callers, with 20 minutes for the complete HA workflow step. Production behavior and each internal deadline assertion remain unchanged.
+
+### Preserve candidate source while forwarding qualification fixes
+
+A selected release-fixture correction after a reserved candidate receives a forward application candidate. Keep the chart candidate and its default image version aligned, preserving previous source, notes and tags.

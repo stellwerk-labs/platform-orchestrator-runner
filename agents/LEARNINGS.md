@@ -44,3 +44,7 @@ A forward Runner candidate also needs an explicitly aligned chart appVersion, ca
 ### Match readiness to the endpoint the next operation needs
 
 An official PostgreSQL image can briefly accept Unix-socket probes while initialization is still running. A TCP readiness probe distinguishes that temporary server from the final service without a fixed delay, retry expansion or database policy change. A growing integration suite also needs an aggregate allowance that includes all cases and deliberate deadline observations, while retaining their individual bounds.
+
+### Align complete-suite qualification with candidate metadata
+
+Qualify the full existing selector before reserving the forward candidate. Update the chart version, image default and installation examples together. Documentation edits alone do not change product qualification.

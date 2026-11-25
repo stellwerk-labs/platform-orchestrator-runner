@@ -11,7 +11,7 @@ It is responsible for:
 
 ## Deployment Pipelines availability (RC)
 
-Deployment Pipelines are an RC feature in [v3.4.0-rc.2](docs/releases/v3.4.0-rc.2.md),
+Deployment Pipelines are an RC feature in [v3.4.0-rc.3](docs/releases/v3.4.0-rc.3.md),
 part of the coordinated Pipeline release candidate. The current stable release
 from `main` does not include Pipelines. Use the matching RC services and clients
 when following Pipeline documentation.
@@ -58,7 +58,7 @@ push a matching `chart-v<version>` tag. The release workflow builds the locked
 protected-side NATS dependency, packages the chart, and publishes it to
 `ghcr.io/stellwerk-labs/charts/platform-orchestrator-kubernetes-agent-runner`.
 
-For the Pipeline RC, use chart `0.5.0-rc.2` with Runner image `v3.4.0-rc.2`
+For the Pipeline RC, use chart `0.5.0-rc.3` with Runner image `v3.4.0-rc.3`
 explicitly selected. Native mode is opt-in; do not rely on a historical default
 image tag to enable the RC.
 Runner `v*.*.*` tags do not trigger the chart publisher.
