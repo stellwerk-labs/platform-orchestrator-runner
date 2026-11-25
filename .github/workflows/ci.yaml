@@ -25,6 +25,8 @@ jobs:
       GOMAXPROCS: '2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 544d253e4d7fad5a56204a15fb8f118cb42aceb6
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.11'
@@ -47,7 +49,7 @@ jobs:
           rm "$tools/terraform.zip"
           echo "$tools" >> "$GITHUB_PATH"
       - name: Install the shipped OpenTofu
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           set -eu
           docker buildx build --target tofu-test-export --output "type=local,dest=$RUNNER_TEMP/native-backend-tools" .

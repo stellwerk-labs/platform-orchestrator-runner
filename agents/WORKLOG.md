@@ -55,3 +55,7 @@ Updated the existing protocol fixture to retain an installed regular shell or pr
 ### Prepare Runner and chart RC2 metadata
 
 Prepared forward application and chart candidate notes, README references and chart version/appVersion for the reviewed portable test fixtures. Existing candidate notes, runtime, dependencies, templates and activation defaults remain unchanged.
+
+### Prepare supplementary Native backend verification
+
+Prepared a separate verification branch which checks the immutable candidate with a larger cold OpenTofu setup budget. Existing CI jobs remain enabled and product source, tags and release producers are unchanged. This supplements the original setup-timeout outcome without relabeling it as success.

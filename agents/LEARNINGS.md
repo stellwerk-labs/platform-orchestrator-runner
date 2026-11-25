@@ -40,3 +40,7 @@ Standard shell and echo paths can be final-component symlinks. A fixture which h
 ### Treat the chart default image as release metadata
 
 A forward Runner candidate also needs an explicitly aligned chart appVersion, candidate version and installation examples. This changes version selection rather than Native activation or workload behavior.
+
+### Leave headroom for cold tool compilation
+
+A cold tool compilation can exhaust a setup budget before any backend test starts. Preserve the original timeout outcome and distinguish the workflow commit from the exact candidate checked out by the supplemental job. Carry the ordinary setup-budget correction into the next normal source update, never a frozen verification checkout.

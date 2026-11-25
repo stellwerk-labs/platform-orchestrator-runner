@@ -46,3 +46,7 @@ Keep approved-tool validation strict about regular files and frozen digests. Ret
 ### Align forward Runner and chart candidate metadata
 
 A correction after a reserved application candidate receives a forward version. Keep the chart candidate and its default image version aligned with the corrected Runner. Preserve previous notes and tags.
+
+### Separate candidate source from supplementary verification
+
+Keep the immutable product candidate unchanged while checking its actual Native Kubernetes backend through a separately identified nonpublishing workflow. Pin that job checkout to the candidate and expand only the cold OpenTofu setup budget. All ordinary CI jobs, security checks, tests, cleanup and outer limits remain active.
