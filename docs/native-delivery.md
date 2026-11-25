@@ -1,19 +1,23 @@
 # Native delivery custody
 
-The native agent freezes one versioned delivery beside each existing rollout_events row before its first new publication. The encrypted record holds the exact progress envelope and optional deployment-result envelope, including event identity, timestamp and payload. It also binds the encrypted content to its event row. A transaction selects the stored command/event and current authoritative terminal revision; caller-supplied progress cannot authorize a result. Existing no-effect receipt checks remain in that transaction.
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
 
-Retries load the recorded pair before consulting newer progress. An absent result stays absent. A previously frozen result remains present even if diagnostics advance progress. The stable deployment-result identity has one owner. Current post-task failure is nonterminal, so repair can complete and produce its first successful result without repeating Apply. Supporting replacement of an already terminal ordinary result would require an explicit DP transition protocol; this batch does not add one.
+The Native Agent durably records each versioned delivery before its first publication. The encrypted record holds the exact progress envelope and optional deployment-result envelope, including event identity, timestamp and payload. It also binds the encrypted content to its event row. A transaction selects the stored command/event and current authoritative terminal revision; caller-supplied progress cannot authorize a result. Existing no-effect receipt checks remain in that transaction.
 
-The agent publishes exact envelopes through the existing authenticated Gateway /events endpoint, which preserves their bytes. It sends progress followed by the optional result and then acknowledges only that local event row. A lost response leaves the row pending and repeats the same pair. Existing stop-at-first-error scheduling remains. Old outbox rows freeze on first new delivery; this cannot reconstruct unknown bytes published by older software. Retain rollout_deliveries with its event/command identity until a separately agreed GC/replay/backup policy allows removal.
+Retries load the recorded pair before consulting newer progress. An absent result stays absent. A previously frozen result remains present even if diagnostics advance progress. The stable deployment-result identity has one owner. Current post-task failure is nonterminal, so repair can complete and produce its first successful result without repeating Apply. Supporting replacement of an already terminal ordinary result would require an explicit DP transition protocol; this release does not provide that transition.
 
-Ack, Reject and Retry failures are explicit unconfirmed outcomes. Diagnostics contain only operation, bounded class, HTTP status and a static code. Remote error bodies, tokens, receipts, signed inputs and results are excluded. An action error is not proof that the broker retained the command: a lost Reject response may follow successful termination. There is no durable refusal/absence proof in this batch.
+The agent publishes exact envelopes through the existing authenticated Gateway /events endpoint, which preserves their bytes. It sends progress followed by the optional result and then acknowledges only that local event row. A lost response leaves the row pending and repeats the same pair. Existing stop-at-first-error scheduling remains. Old outbox rows freeze on first new delivery; this cannot reconstruct unknown bytes published by older software. Retain delivery history and its command/event identities together with backups. There is no automatic history-removal policy.
 
-Run `make test-agent-delivery-integration` with installed Docker, Python3, OpenTofu and the cached pinned NATS image. The script creates one labelled disposable broker, binds a loopback port that survives its restart and cleans up only its own container. It refuses a missing required broker instead of silently skipping. `AGENT_DELIVERY_KEEP_LOGS=1` preserves its private broker log. Tests use actual Gateway TLS authentication, receipts, real file-backed NATS and real OpenTofu, including response loss after persistence and broker/engine restart. Separate process tests SIGKILL immediately after delivery commit and verify encrypted DB/WAL recovery.
+Ack, Reject and Retry failures are explicit unconfirmed outcomes. Diagnostics contain only operation, bounded class, HTTP status and a static code. Remote error bodies, tokens, receipts, signed inputs and results are excluded. An action error is not proof that the broker retained the command: a lost Reject response may follow successful termination. Do not infer a durable refusal or absence solely from a transport error.
 
-This qualifies Gateway publication and local custody, not DP application or global exactly-once execution. Accepted-import replay is tested before the outer command expiry. Native late-expiry delivery, durable admission/refusal, transient refusal classification and exact recovery after MaxDeliver belong to subsequent batches. Legacy job /results still creates its own timestamp.
-
-The legacy SQLite development profile retains its original wire identity. The separately qualified native PostgreSQL profile supports multiple worker slots with shared DBOS coordination and generation fencing; see [PostgreSQL storage](postgres-rollout-storage.md). The Agent delivery target covers legacy execution plus native Gateway/consumer isolation. The separate HA target runs signed native commands through actual CLI workers. Neither target activates a live site, qualifies database failover, or changes existing unknown-effect fences.
-
+The legacy SQLite development profile retains its original wire identity.
+Native PostgreSQL supports multiple stable worker slots with shared DBOS
+coordination and generation fencing; see [PostgreSQL storage](postgres-rollout-storage.md).
+Delivery retries do not provide global exactly-once infrastructure effects.
+Preserve existing unknown-effect fences.
 
 ## Native registration authority
 
@@ -47,7 +51,7 @@ scope checked before publication.
 Native consumers use create-only configuration with an explicit native marker.
 A conflicting preexisting durable is refused, preserving its pending messages
 and cursor. Before bootstrap/create/bind, native startup requires a connected
-broker reporting a canonical stable version of at least2.10.0; unknown,
+broker reporting a canonical stable version of at least `2.10.0`; unknown,
 disconnected, malformed, negative-component and prerelease values refuse.
 Older servers can ignore create-only actions and update retained configuration.
 Legacy consumers retain their existing old-broker behavior.
@@ -55,41 +59,24 @@ Legacy consumers retain their existing old-broker behavior.
 Every eligible native broker/reconnect peer must support that capability. The
 version read is not atomic with a later request or proof about another stream
 leader. Mixed-old cohorts are unsupported; operators must qualify the complete
-cohort. The pinned2.14.0 configuration is qualified here, and a higher version
-passing the minimum is not a qualification claim. No automatic upgrade occurs.
+cohort. A version check does not upgrade a broker or validate arbitrary later
+versions. Use a tested compatible broker deployment throughout the cohort.
 
-Run the separate required CI fault target after caching its immutable fixture:
-
-```sh
-docker pull nats@sha256:d402af4147fc7ba334ecc45b1cb14a6f46f32ad6a36873fbd1a6a37ce42452dd
-make test-unsupported-native-nats
-```
-
-This target owns a loopback-only2.9.25 broker and proves native refusal leaves
-stream/consumer configuration, creation identity, pending delivery and cursors
-unchanged, while actual legacy publish/fetch/Ack remains available. It has fixed
-test selection and never silently skips or borrows a shared broker. The old
-image is a test fault fixture, never part of the production image.
 Native PostgreSQL format4 introduced refusal of old format3 journals containing
 already frozen slug-based deliveries; it does not rewrite their encrypted
 records or reinitialize storage. Use fresh schemas with explicit retained
 identity, never overwrite a site's old history to bypass this refusal.
 Current format7 retains the private Kubernetes destination/trust binding introduced by format5 and additionally requires the private-identity-derived Native catalogue commitment. Prior raw-catalogue formats refuse without rewriting metadata or ciphertext. The delivery journal remains UUID scoped. Provision the retained age identity before offline export; see [the catalogue contract](offline-runner-catalogue.md).
 
-## Activation gates
+## Activation prerequisites
 
-This is a private-source qualification checkpoint. The shared hmessaging owner
-adds the canonical token/message-ID helpers without a new module dependency.
-A real published owner version and honest consumer pin are required before
-ordinary CI or a release can build this source without the private workspace.
-
-Native rollout workers currently use `gateway_url` and UUID-authenticated HTTP;
+Native rollout workers use `gateway_url` and UUID-authenticated HTTP;
 their rollout configuration does not grant raw broker publication. Generic
 Gateway/importer NATS configuration accepts operator-supplied credentials and
 does not itself enforce a tenant trust classification. Keep raw publication to
 shared central streams restricted to trusted platform publishers/normalizers.
 Untrusted customer sites or steps must use the UUID-authenticated Gateway or the
-future signer-scoped import boundary that recomputes trusted transport identity.
+centrally bound [Native diode importer](native-diode-ingress.md) that recomputes trusted transport identity.
 Site-local brokers may be controlled by that site's operator, with no other
 site's traffic sharing their dedup domain.
 
@@ -98,11 +85,9 @@ publisher authorized only for siteA's subject can still choose siteB's exact
 `Nats-Msg-Id` and suppress B before DP checks run. A later target/inbox refusal
 cannot undo this broker effect. If direct raw publication from mutually
 untrusted sites is required, separate broker accounts/streams by trust domain;
-this checkpoint adds no such isolation. Before activation, qualify the actual
-credential/ingress deployment: untrusted identities cannot publish directly to
-a shared central stream, or their dedup domains are isolated. The current
-2site HTTP tests qualify the trusted normalizer, not arbitrary raw-publisher
-ACLs or that later deployment gate.
+the shared stream does not provide that isolation. Before activation, verify that
+untrusted identities cannot publish directly to a shared central stream, or that
+their deduplication domains are isolated.
 
 Upgrade or remove stream permissions from every old Gateway and unscoped
 legacy relay before native activation. Updated legacy HTTP ingress reserves
@@ -110,15 +95,10 @@ the native message-ID prefix, but an older publisher sharing the stream can
 still manufacture a native-prefixed dedup ID. Broker credentials/ACL inventory
 is an operator prerequisite; source checks alone cannot police old binaries.
 
-Native direct deployment-token URL routes refuse native slugs and the reserved
-transport namespace before bundle, result, key or log access. This guard is
-partial: a valid native Deployment token supplied through a valid legacy URL
-alias still needs the separate authoritative frozen-Deployment target gate
-before every such object/result access. DP target projection/dispatch,
-signer-scoped diode transport and native Environment assignment remain separate
-required integration gates. Do not activate native sites before they are done.
-
-Native command format7 binds all7accepted target fields and removes the unused legacy Deployment token. The outer envelope remains protocol1/type `execute-rollout-v1`; the UUID route and scoped message identity remain separate from inner domain IDs. The strict frozen-command decoder now supplies Native NoEffect command authority while existing permanent effect/unknown provenance still decides whether a receipt is eligible. This source contract does not open DP producer/dispatch, direct HTTP, controls/logs or custody gates. See [Native command authority](native-command-authority.md).
+Native command format7 binds the accepted execution target and omits the legacy
+Deployment token. The outer envelope remains protocol1/type `execute-rollout-v1`;
+UUID routes and scoped message identities remain separate from inner domain IDs.
+Unknown effects remain fenced. See [Native command authority](native-command-authority.md).
 
 ## Direct Deployment access profiles
 
@@ -162,16 +142,17 @@ Static Native configuration rejects both a central deployment-authority URL and
 retained-key forwarding. Its direct refusals need no Core/DP HTTP and do not change
 Agent authentication, whole-command transport or local execution. The older
 protected remote-Job chart remains a legacy operator; setting an identity does not
-convert it into a Native worker. Chart opt-in wiring and Native worker packaging
-are separately qualified deliverables.
+convert it into a Native worker. Use the explicit [Native worker packaging](native-runner-packaging.md);
+setting Gateway identity alone does not start a worker.
 
 A legacy-only Gateway sharing raw object credentials and the token salt with a
 Native realm can still be a bypass. Upgrade every reachable entry point into that
 realm or isolate the legacy cohort before activation. Existing disconnected
 legacy behavior remains available in its legacy-only realm. Arbitrary shared mixed
-offline legacy/Native object access is not qualified by this configuration, and no
-live state or key migration is implied. Native producer activation still requires
-actual Core/IAM enrollment, frozen target and complete deployment qualification.
+offline legacy/Native object access is unsupported by this profile. There is no
+automatic state or key migration. Native activation requires matching RC Core/IAM
+enrollment and the frozen Deployment target, together with the documented Gateway
+and worker configuration.
 
 
 For shared central reverse file/diode ingress, use the required centrally bound

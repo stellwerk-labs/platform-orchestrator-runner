@@ -25,3 +25,10 @@ Keep the released application source and its public SDK contracts aligned; prese
 ## 2026-11-24: Runner chart release candidate
 
 Run the actual workflow Bash when checking release arguments. A local `gh` argument recorder captures stable, RC and beta command lines without contacting GitHub.
+
+## 2026-11-25: Pipeline RC documentation
+
+Put availability guidance at feature entry points and keep operational limits explicit.
+Customer guidance must avoid internal experiment history and private environment details.
+For generated documentation, preserve notices in the source templates while retaining
+dynamic schemas, examples and imports.

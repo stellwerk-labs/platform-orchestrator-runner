@@ -1,5 +1,10 @@
 # Native reverse diode ingress
 
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
+
 A central importer for each customer-controlled site binds its existing Ed25519
 verification key to exactly 1 organization and 1 server-issued Native registration
 UUID. Provision the key, scope and owned spool/processed ledger together. A site
@@ -79,7 +84,7 @@ For an existing installation, perform a controlled cutover:
 If ownership, filter or drained state cannot be verified, stop the cutover and
 resolve it administratively. The application performs no automatic deletion.
 
-Source/component qualification of this importer and chart does not qualify a physical
-diode, the complete offline recipe, HA, or a particular customer's installation.
-The later offline fixture must check immutable courier frame/`Data`/ciphertext custody
-separately from canonical broker subject/ID/creation metadata and dropped headers.
+Validate the physical diode and its filesystem behavior for the actual site.
+Preserve immutable courier frames, signed `Data`, log ciphertext and processed
+ledgers across transfer and recovery. Broker subjects, message IDs and creation
+metadata are derived centrally; imported headers are not trusted.

@@ -1,14 +1,19 @@
 # Updating a Native execution catalogue
 
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
+
 Use `rollout-catalogue-update` when changing a Native site's private tool environment,
 IaC executable inventory, capabilities or pricing credentials. It retains the site
 identity, registration UUID, saved plans, encrypted execution history and result
 receipts. Ordinary startup continues to refuse an unapproved catalogue change.
 
-This procedure is for the first supported Native cohort, which includes atomic
-storage verification and worker activation. Earlier private binaries lack that
-fence. Stop and revoke them before using this cohort. This does not support a
-rolling transition from those binaries. SQLite development storage is unchanged.
+This procedure requires the coordinated Native RC, including atomic storage
+verification and worker activation. It does not support a rolling transition
+from earlier incompatible Native profiles. Stop and revoke those workers first.
+Existing SQLite development storage is unchanged.
 
 1. Pause Core admission, publishers and remote/offline carriers. Complete accepted
    executions, or resolve their existing recovery fences. Pending approval,

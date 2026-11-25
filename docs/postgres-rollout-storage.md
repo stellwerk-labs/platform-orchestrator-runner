@@ -1,5 +1,10 @@
 # PostgreSQL rollout storage prerequisite
 
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
+
 This profile stores Runner rollout commands, plans, outputs, logs, effect
 receipts and frozen delivery records in site-local PostgreSQL. Payloads retain
 existing age encryption. Terraform/OpenTofu state still uses its configured
@@ -50,8 +55,8 @@ remain nonzero outcomes, including when no stage is active.
 Signals sent directly to an effect child, SIGKILL and a container supervisor's
 final kill are faults. Supervisor packaging must send ordinary TERM only to the
 native parent; systemd's default control-group TERM would kill its children
-before this drain can protect them. Runtime profiles and their live Linux
-qualification remain separate work.
+before this drain can protect them. Use the documented Native Helm or systemd
+profile and validate supervisor behavior for the actual deployment.
 
 After successful drain, stop and replace only that stable slot, verify its
 replacement is ready, then proceed to the next slot. Preserve the same slot ID,
@@ -68,9 +73,9 @@ supervisor to restart their stable slot; public DBOS recovery then re-enqueues
 them onto the shared queue. Another eligible slot may adopt only after the prior
 owner's durable generation has been superseded.
 
-This source checkpoint is not a complete customer HA deployment. Production
-packaging, supervised replacement, database failover/durability and quarantined
-restore qualification remain required. A connection loss does not prove that an
+Multiple execution workers do not configure PostgreSQL high availability.
+Operators must provision supervised replacement, database durability/failover
+and a quarantined restore procedure. A connection loss does not prove that an
 external effect did not happen: irreversible effect claims survive, and an
 unproven Apply is held rather than repeated.
 
@@ -85,7 +90,7 @@ startup `options` (including `PGOPTIONS`) are refused; use direct DSN parameters
 A missing configured standby blocks write acknowledgement rather than enabling
 asynchronous fallback. The operator still owns replication, catch-up and
 old-primary fencing. Connection checks do not qualify failover or restore.
-The required isolated HA target provisions a real second synchronous standby.
+Provision and monitor a synchronous standby before enabling execution.
 
 ## Explicit configuration
 
@@ -111,7 +116,7 @@ example above is illustrative. All worker slots share that exact UUID. Keep
 the existing organization, Runner slug, trust key, tools, capabilities and
 private scratch directory settings. `worker_id` is stable across replacement
 of this worker. Each worker has its own private scratch directory; all members
-of the eventual site pool need the same retained age identity and tool catalogue.
+of the site pool need the same retained age identity and tool catalogue.
 The configured PostgreSQL profile never falls back to SQLite and never creates
 a replacement age key. Only omitting PostgreSQL AND leaving `runner_uuid` empty retains the existing
 development SQLite v1 profile. Either mismatched pair refuses before opening
@@ -130,14 +135,14 @@ database so native acceptance plus queue admission and approval/send transaction
 remain atomic. Queue configuration uses public never-update registration and
 exact persisted limits/identity verification; a worker cannot silently overwrite
 the pool policy. Approval waits count toward workflow concurrency, and central
-Runner capacity stays1pool-wide budget. A pooler must preserve PostgreSQL session
+Runner capacity remains 1 pool-wide budget. A pooler must preserve PostgreSQL session
 affinity; transaction-mode pooling does not preserve slot locks and is unsupported.
 
 ## Initialize, then verify and run
 
 1. Start with a fresh private scratch directory and a fresh application schema.
    `rollouts.sqlite`, its WAL/SHM or a local `identity.agekey` refuse PostgreSQL
-   startup in that directory. Existing spike histories are not migrated.
+   startup in that directory. Existing SQLite histories are not automatically migrated.
 2. Using an initialization role, run `runner rollout-storage-init` with the
    explicit configuration. This initializes the native schema under a separate
    migration transaction lock and calls public `dbos.Migrate`; it launches no
@@ -156,55 +161,14 @@ Initialization is restartable after interruption. A readiness marker is set
 only after DBOS migration succeeds; runtime refuses an incomplete initialization.
 Missing/damaged schemas are not silently recreated by runtime. Wrong keys,
 unsupported formats and mismatched site/catalogue/version refuse recovery.
-Operators must not rename schemas or edit the journal to bypass refusal. Native format7 requires the keyed catalogue before storage access and rejects previous raw-catalogue profiles without rewriting metadata or ciphertext or recovering workflows. Identity or private task-environment rotation changes the immutable profile; there is no implicit migration or credential unlock. SQLite/v1 raw digests and history remain unchanged.
+Operators must not rename schemas or edit the journal to bypass refusal. Native format7 requires the keyed catalogue before storage access and rejects previous raw-catalogue profiles without rewriting metadata or ciphertext or recovering workflows. Identity or private task-environment changes alter the immutable profile; there is no implicit migration or credential unlock. Use the explicit [catalogue maintenance procedure](native-rollout-catalogue-updates.md) for supported task-environment changes. SQLite/v1 raw digests and history remain unchanged.
 
 SQLite WAL compaction and plaintext migration do not apply to this format.
 Fresh PostgreSQL payloads are encrypted from their first insert. Database/WAL,
 backups and the retained identity remain sensitive, and backups need consistent
 DBOS plus application schemas. Backup/PITR rollback and cloned sites require
-quarantine and reconciliation before execution; this checkpoint does not supply
-an activation or restore protocol.
-
-## Qualification
-
-On Linux, export the pinned shipped test tools before PostgreSQL qualification:
-
-```sh
-test_tools="$(mktemp -d)"
-docker buildx build --target pipeline-test-export --output "type=local,dest=$test_tools" .
-chmod 0755 "$test_tools/tofu" "$test_tools/infracost"
-export PATH="$test_tools:$PATH"
-export INFRACOST_TEST_BINARY="$test_tools/infracost"
-```
-
-The export contains Linux executables. Other host platforms require separately
-qualified native OpenTofu and pinned `v0.10.49+stellwerk.1` Infracost executables,
-with `INFRACOST_TEST_BINARY` set to the actual estimator path. The mandatory cost
-comparison gate never substitutes an installed unqualified estimator or skips.
-
-Run against a disposable PostgreSQL endpoint, using a private secret file:
-
-```sh
-RUNNER_POSTGRES_TEST_DSN_FILE=/private/test-dsn make test-rollout-postgres
-```
-
-The explicit gate fails when its fixture is missing. It uses unique schemas and
-actual DBOS/OpenTofu, preserves command/artifact/log/delivery confidentiality,
-checks exact saved-plan use and approval transaction behavior, and terminates
-only its own application backend to prove that a stale reconnect cannot write
-through a replacement slot. The complete process qualification is a separate
-required target with invocation-owned PostgreSQL/NATS and a built real Runner:
-
-```sh
-make test-rollout-ha-integration
-```
-
-It requires the pinned PostgreSQL/NATS images already present (CI pulls the exact
-digests), actual shipped OpenTofu, the pinned estimator selected by
-`INFRACOST_TEST_BINARY`, and Docker. It never reuses a live service or
-journal. Tests run separate CLI processes and preserve their private fault logs
-when `HA_TEST_KEEP_LOGS=1` is set. This is not a claim of PostgreSQL HA, arbitrary
-survivor takeover or exactly-once external infrastructure effects.
+quarantine and reconciliation before execution. Follow the external activation
+and managed restore procedure in [Native Runner packaging](native-runner-packaging.md#external-activation-and-managed-restore).
 
 ## Worker failure and pending recovery
 
@@ -235,7 +199,7 @@ Its existing encrypted identity check also binds the selected private Kubernetes
 destination/trust; same-target inline credential refresh is allowed. Earlier
 Native formats, including format6 and the previous raw-catalogue format5, refuse without metadata or ciphertext rewrite.
 See [the supported backend profile](native-kubernetes-backend.md).
-Old unbound PostgreSQL format2 experiments refuse both runtime open and storage
+Old unbound PostgreSQL format2 profiles refuse both runtime open and storage
 initialization; neither repairs or migrates them. Use fresh schemas and retained
 identity explicitly. Never initialize blank PostgreSQL history as a continuation
 of an existing SQLite site or its unresolved effects.
@@ -246,22 +210,20 @@ existing schemas/subjects/ciphertext are not reinterpreted. Source and Apply-chi
 UUIDs must match before scratch creation or effect admission. Existing source
 lineage, single-use, state-base, recipe and material checks remain required.
 
-The isolated HA target now uses native UUID-bound Gateway authentication,
-disjoint transport subjects, scoped message IDs and encrypted receipts around
-signed v2 commands. Format3 journals with already frozen human-slug deliveries
-refuse both open and initialization without rewriting ciphertext or metadata.
-The [native delivery gates](native-delivery.md#activation-gates) still require
-published shared-contract dependencies, upgraded/scoped legacy publishers,
-signer-scoped diode transport and authoritative frozen DP target validation
-before any native Environment assignment or live activation.
+Native transport uses UUID-bound Gateway authentication, site-scoped subjects,
+scoped message IDs and encrypted delivery receipts around signed v2 commands.
+Older journals with already frozen human-slug deliveries refuse open and
+initialization without rewriting ciphertext or metadata. Before activation,
+configure the [Native delivery security boundaries](native-delivery.md#activation-prerequisites),
+upgrade or isolate older publishers, and use authoritative frozen DP targets.
 
 ## Native command format7
 
 Format7 additionally requires the complete accepted execution target and token-free Native commands. It refuses format6 Open and initialization before worker activation or DBOS recovery, even if that older profile has a valid keyed catalogue. No in-place rewrite, migration, reset or automatic state adoption is provided. Retain the old encrypted history, private identity, claims and qualified format6 binary for controlled reconciliation. A new schema is not continuation of an unresolved old site. SQLite/v1 is unchanged.
 
-The target's Core typed state-configuration SHA is opaque at the site. It is not the independently retained private Kubernetes destination/trust identity. Standalone Engine local state remains available for isolated runtime tests, but it is not a Core-registered backend. See [the Native command contract](native-command-authority.md).
+The target's Core typed state-configuration SHA is opaque at the site. It is not the independently retained private Kubernetes destination/trust identity. Local state is not a Core-registered backend. See [the Native command contract](native-command-authority.md).
 
 The optional chart Native profile and plain Linux/systemd examples are described
 in [Native Runner packaging](native-runner-packaging.md). They preserve the remote
 chart default, external PostgreSQL authority and explicit initialization/runtime
-roles. Packaging source alone does not qualify an image or service lifecycle.
+roles. Use the matching RC image and preserve the documented service lifecycle.

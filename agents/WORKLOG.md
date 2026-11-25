@@ -39,3 +39,11 @@ Focused real-NATS regression checks, the ordinary unit suite, vet, lint and Helm
 ## 2026-11-24: Runner chart release candidate
 
 Prepared chart `0.5.0-rc.1` metadata, packaged README, tag notes and the conditional GitHub prerelease argument. The local release contracts, chart metadata, Helm render and package checks passed with Bash `5.3.20` and Helm `4.3.2`. The hosted producer pins Helm `4.3.0`; its publication checks remain separate. The unchanged Go native wrapper was not rerun.
+
+## 2026-11-25: Pipeline RC documentation
+
+Prepared customer-facing RC availability and deployment-default guidance without
+runtime, schema, dependency or version changes. Focused documentation checks cover
+text, links, file hashes and applicable generator templates; the full functional
+suite was not rerun because the qualified application code is unchanged.
+See DECISIONS.md and LEARNINGS.md for scope and documentation maintenance guidance.

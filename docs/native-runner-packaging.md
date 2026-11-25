@@ -1,10 +1,16 @@
 # Optional Native Runner deployment
 
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
+
 The chart defaults to the existing `remote` Job launcher. `executionMode: native`
 selects stable PostgreSQL worker slots. It requires a coordinated Native image,
-not the chart's historical default `appVersion`. The examples in `examples/native/`
-are trial inputs, not an assertion that a released image already qualifies this
-profile. No database dependency, migration controller or automatic upgrade is added.
+not the chart's historical default `appVersion`. For this RC, select chart
+`0.5.0-rc.1` and Runner image `v3.4.0-rc.1` explicitly. Adapt all placeholders in
+`examples/native/` before use. No database dependency, migration controller or
+automatic upgrade is added.
 
 ## Site configuration and custody
 
@@ -73,7 +79,7 @@ backends. Replace/remove the example Kubernetes path according to the real profi
 An existing completed/failed initialization Job is not an automatic retry loop.
 Inspect its outcome before explicitly removing/recreating it for a fresh approved
 initialization operation. Never initialize, reset, re-key or migrate the retained
-SQLite test-drive site with these examples. Incompatible storage/profile refuses;
+SQLite site or an existing incompatible journal with these examples. Incompatible storage/profile refuses;
 retained history and unknown-effect claims must remain intact.
 
 ## Ingress profiles
@@ -95,7 +101,7 @@ set. The worker JSON must use the matching protected Gateway URL/CA and identity
 Do not combine static Native identity with connected deployment authority or
 retained-key forwarding. Update/isolate every old Gateway ingress replica before
 claiming this profile is active. Existing signer-scoped commands, controls,
-encrypted log artifacts and disconnected courier qualification remain required;
+encrypted log artifacts and a validated disconnected courier remain required;
 this chart does not provide the complete offline transport choreography.
 
 `outbox.enabled` is a legacy remote-Job feature and refuses Native mode. Native
@@ -133,9 +139,7 @@ For each slot, using the intended kubecontext and namespace:
    kubectl delete --raw /api/v1/namespaces/NAMESPACE/pods/SLOT -f delete-options.json
    ```
 
-   A conflict means re-read and investigate, never force deletion. This raw-client
-   invocation follows kubectl's body-forwarding implementation, but still needs the
-   actual disposable-cluster stale-precondition qualification before release.
+   A conflict means re-read and investigate, never force deletion.
 5. Wait for the same slot's replacement and authenticated readiness before the next
    slot. Preserve all command/effect/plan-use/history claims. Do not force delete,
    rename the pool, alter keys/catalogue/budgets/format, or auto-scale down as a retry.
@@ -148,8 +152,7 @@ unknown effects; reconcile rather than repeat Apply.
 
 Kubernetes grace defaults to and must remain at least `86520s`: maximum accepted
 Apply `86400s` plus `120s` bounded bookkeeping/shutdown/scheduling allowance.
-This requires the actual qualified execution-budget implementation in the selected
-image. It bounds one admitted active stage, not a whole pipeline or extended signed
+Use the matching RC image with its bounded execution stages. It bounds one admitted active stage, not a whole pipeline or extended signed
 authority. No preStop consumes the same grace window. A grace expiry is a fault,
 not permission to retry infrastructure.
 
@@ -207,21 +210,18 @@ reconciliation. Do not use `KillMode=process/none` or disable final cleanup.
 
 Drain the exact instance with its mounted config/credential, verify process
 incarnation and closed/idle status, then stop/restart that instance. A process change
-invalidates the old drain result. Actual Linux systemd qualification is required;
-a macOS unit-file parse cannot prove service behavior.
+invalidates the old drain result. Verify the service and its shutdown behavior
+on the target Linux systemd installation.
 
-## Qualification boundaries
+## Deployment validation
 
-Prepared tests exercise the real loader and real Helm renders with parsed
-Kubernetes resources, including complete legacy parity against a frozen parent
-chart. They do not prove the actual image, mounts, session-role grants or lifecycle.
-Before customer use, qualify the coordinated Linux image with 2 stable slots,
-external disposable PG, real supported shared state backend and Core/IAM/Gateway
-registration. Include saved Plan across slot loss, one real Apply, PID1 TERM during
-Apply, stale delete preconditions, undrained replacement protection and force-stop
-uncertainty. Check UID/group/regular target modes and readonly root. Run systemd
-separately on an actual Linux service manager. Keep normal module/image/signature,
-provenance/notices, backup/restore, plugin and disconnected transport obligations.
+Before production use, verify the actual image, mounted-file access, runtime-role
+grants and supervisor behavior on the target platform. Configure at least 2 stable
+worker slots against the same site database and supported shared state backend.
+Validate credential refresh, worker replacement and drain without repeating Apply.
+PostgreSQL failover, backup/restore and physical disconnected transport remain
+site-specific operator responsibilities. Forced termination can leave uncertain
+infrastructure effects that require reconciliation.
 
 References: [StatefulSet OnDelete](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies),
 [Pod termination](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#termination-of-pods),

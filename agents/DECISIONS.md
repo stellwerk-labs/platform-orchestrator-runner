@@ -31,3 +31,10 @@ Prepare Native pipeline application changes as a source export with all product 
 ## 2026-11-24: Runner chart release candidate
 
 Chart `0.5.0-rc.1` selects Runner `v3.4.0-rc.1` through `appVersion`. Tag-triggered GitHub releases derive `--prerelease` from the final chart version and keep `--latest=false`.
+
+## 2026-11-25: Pipeline RC documentation
+
+Mark Deployment Pipelines as an RC feature, separate from the current stable release.
+Preserve direct Apply as the built-in default; publishing a recipe alone changes no default.
+This documentation correction changes no runtime, schema, dependency or RC version
+and does not invalidate the existing functional qualification.

@@ -9,6 +9,20 @@ It is responsible for:
 3. Inspecting the results.
 4. Returning deployment results and encrypted logs through the gateway.
 
+## Deployment Pipelines availability (RC)
+
+Deployment Pipelines are an RC feature in [v3.4.0-rc.1](docs/releases/v3.4.0-rc.1.md),
+part of the coordinated Pipeline release candidate. The current stable release
+from `main` does not include Pipelines. Use the matching RC services and clients
+when following Pipeline documentation.
+
+Upgrading alone does not activate Native execution or change existing deployment
+behavior. On an explicitly enabled Pipeline installation, the built-in **Apply**
+default runs Apply directly, with no additional Plan, approval, pre-deployment or
+post-deployment steps. Planning remains an explicit action or part of a selected
+recipe. Publishing a recipe alone does not change any default; an authorized
+operator must select it or update deployment-use policy.
+
 ## Remote runner configuration
 
 Remote runners require `RUNNER_GATEWAY_URL`, `ORG_ID`, `RUNNER_ID`, and an
@@ -29,14 +43,12 @@ The Helm chart supports three deployment modes:
   selected by the exact runner command and only the encrypted log selected by
   its ready event; it never copies a shared Object Store stream wholesale.
 
-The physical diode path is not part of the `v3.0.0` qualification.
-Treat `airgap` as unqualified until it has passed a test with the selected diode
-device and its exact filesystem semantics.
+Validate air-gapped transport with the selected physical diode device and its
+exact filesystem semantics before production use.
 
-Diode frames are Ed25519-signed and attachment size is limited to 16 MiB. This
-spike therefore preserves the existing buffered log model (runner logs are
-limited to 10 MiB); it does not implement live log tailing. Live streaming
-would require a separate ordered, resumable chunk protocol.
+Diode frames are Ed25519-signed and attachment size is limited to 16 MiB.
+Runner logs use the buffered log model and are limited to 10 MiB. Live log
+tailing is not supported over this transport.
 
 ## Publishing Helm Chart
 
@@ -46,8 +58,9 @@ push a matching `chart-v<version>` tag. The release workflow builds the locked
 protected-side NATS dependency, packages the chart, and publishes it to
 `ghcr.io/stellwerk-labs/charts/platform-orchestrator-kubernetes-agent-runner`.
 
-Chart `0.4.0` selects Runner `v3.2.0` when `image.tag` is empty.
-Publish the chart after the matching stable Runner image has been qualified.
+For the Pipeline RC, use chart `0.5.0-rc.1` with Runner image `v3.4.0-rc.1`
+explicitly selected. Native mode is opt-in; do not rely on a historical default
+image tag to enable the RC.
 Runner `v*.*.*` tags do not trigger the chart publisher.
 
 Publishing behavior:

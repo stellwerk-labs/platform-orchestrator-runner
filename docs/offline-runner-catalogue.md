@@ -1,5 +1,10 @@
 # Export the approved local inventory
 
+> **RC feature:** This page describes Deployment Pipelines in the coordinated
+> release candidate (Runner `3.4.0-rc.1`). Pipelines are not available in the
+> current stable release from `main`. Use matching Pipeline RC components; Native
+> execution requires explicit operator activation.
+
 Run the exporter inside the same image and local configuration that will execute the pipeline:
 
 ```sh
@@ -15,10 +20,10 @@ Private task environment, executable paths, endpoints, backend settings, credent
 
 An explicit PostgreSQL object selects `stellwerk.runner.rollout/v2`, `stellwerk.pipeline/v2` and `stellwerk.pipeline.plan-apply/v2`. This export describes installed support and requires no registration UUID: Core needs the inventory before creating the registration and issuing that UUID. No PostgreSQL object preserves the retained SQLite v1 runtime/protocols. Export neither validates nor establishes site authority and reads no database or signing key. Native export reads the same single bare X25519 identity file as runtime, using its bounded regular-file and permission checks. No UUID, SQL, network, directory lock or workflow runtime is needed. Actual Engine startup and storage initialization still require the canonical, nonzero server-issued UUID with PostgreSQL, and reject a UUID without PostgreSQL before opening storage. The catalogue document contract remains `stellwerk.runner.catalogue/v1` in both profiles.
 
-Local v2 storage/command/artifact binding is not authenticated multi-site transport. Gateway JWT/routing/receipts, frozen Deployment ownership and native registration integration must be qualified before native Environment assignment. Exporting metadata alone neither enrolls a fresh site nor authorizes an existing environment's migration.
+Exporting metadata alone neither enrolls a fresh site nor authorizes migration of an existing Environment. Configure the matching RC registration, Gateway authentication, accepted Deployment target, and site-scoped transport before explicitly assigning an Environment to Native execution.
 
 Provision in this order: explicitly provision and securely retain the shared PostgreSQL age identity, then export the approved inventory; create the Core native registration with its public Agent key, positive capacity and catalogue; copy the returned UUID into private local configuration; explicitly initialize fresh PostgreSQL storage. No placeholder UUID is required to export.
 
 For Native PostgreSQL, an explicit `kubernetes_backend_config_path` is validated with the same bounded inline configuration policy as execution. In addition to the required retained Native age identity, this reads only that backend file, never a database. Unsupported file references, credential plugins, implicit trust or ambient backend/proxy overrides fail before stdout. A valid export is not a credential/reachability test or central attestation of the private cluster. See [the supported Native Kubernetes backend profile](native-kubernetes-backend.md). Legacy SQLite export keeps its existing behavior.
 
-Native identity or private task-material changes alter the immutable profile and require deliberate fresh-site provisioning. Existing raw-digest Native histories refuse without rewrite or recovery; there is no implicit rotation or unlock. All HA workers and offline exports must use the same retained identity and installed inputs. Legacy SQLite/v1 keeps its exact unkeyed digest and history compatibility, including its known dictionary-privacy limitation. Public metadata names remain operator-controlled, and this commitment does not attest external files or tool behavior.
+Native identity changes require deliberate fresh-site provisioning. Private task-material changes require the explicit [catalogue maintenance procedure](native-rollout-catalogue-updates.md). Existing raw-digest Native histories refuse without rewrite or recovery; there is no implicit rotation or unlock. All HA workers and offline exports must use the same retained identity and installed inputs. Legacy SQLite/v1 keeps its exact unkeyed digest and history compatibility, including its known dictionary-privacy limitation. Public metadata names remain operator-controlled, and this commitment does not attest external files or tool behavior.
