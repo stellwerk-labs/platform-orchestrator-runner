@@ -38,3 +38,7 @@ Mark Deployment Pipelines as an RC feature, separate from the current stable rel
 Preserve direct Apply as the built-in default; publishing a recipe alone changes no default.
 This documentation correction changes no runtime, schema, dependency or RC version
 and does not invalidate the existing functional qualification.
+
+### Use actual regular executables in protocol fixtures
+
+Keep approved-tool validation strict about regular files and frozen digests. Retain an already regular installed shell; copy only a final-component shell symlink into the existing owned test directory under basename sh. This preserves real shell behavior, including multicall dispatch, without unnecessarily relocating system executables. Resolve the catalogue-only echo fixture before hashing it. Production execution and confinement policies remain unchanged.

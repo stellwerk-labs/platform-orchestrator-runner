@@ -32,3 +32,7 @@ Put availability guidance at feature entry points and keep operational limits ex
 Customer guidance must avoid internal experiment history and private environment details.
 For generated documentation, preserve notices in the source templates while retaining
 dynamic schemas, examples and imports.
+
+### Distribution aliases are not approved executable fixtures
+
+Standard shell and echo paths can be final-component symlinks. A fixture which hashes their targets but supplies the aliases contradicts the regular-file execution contract. Retain already regular installed executables. When a final-component alias requires a copy, real shell bytes under their shell basename preserve behavior without a mock or an operating-system branch.

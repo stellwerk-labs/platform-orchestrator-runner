@@ -24,27 +24,44 @@ func digest(t *testing.T, path string) string {
 func setup(t *testing.T, script string) (Definition, Request) {
 	t.Helper()
 	dir := t.TempDir()
+	interpreter := "/bin/sh"
+	info, err := os.Lstat(interpreter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		shell, err := os.ReadFile(interpreter) // #nosec G304 -- installed shell used only by the test fixture.
+		if err != nil {
+			t.Fatal(err)
+		}
+		interpreter = filepath.Join(dir, "sh")
+		if err := os.WriteFile(interpreter, shell, 0700); err != nil { // #nosec G306 -- test interpreter must be executable.
+			t.Fatal(err)
+		}
+	} else if !info.Mode().IsRegular() {
+		t.Fatal("installed shell is not a regular file or symlink")
+	}
 	path := filepath.Join(dir, "task.sh")
 	if e := os.WriteFile(path, []byte(script), 0700); e != nil { // #nosec G306 -- test executable must be executable.
 		t.Fatal(e)
 	}
 	return Definition{
-		ProtocolVersion:   1,
-		Name:              "check",
-		Version:           "1.0",
-		Phase:             "plan_check",
-		Executable:        path,
-		ExecutableSHA256:  digest(t, path),
-		Interpreter:       "/bin/sh",
-		InterpreterSHA256: digest(t, "/bin/sh"),
-		Retry:             "read_only",
-	}, Request{
-		Version:    1,
-		TaskID:     "test",
-		Inputs:     map[string]Input{},
-		Parameters: json.RawMessage(`{}`),
-		WorkDir:    dir,
-	}
+			ProtocolVersion:   1,
+			Name:              "check",
+			Version:           "1.0",
+			Phase:             "plan_check",
+			Executable:        path,
+			ExecutableSHA256:  digest(t, path),
+			Interpreter:       interpreter,
+			InterpreterSHA256: digest(t, interpreter),
+			Retry:             "read_only",
+		}, Request{
+			Version:    1,
+			TaskID:     "test",
+			Inputs:     map[string]Input{},
+			Parameters: json.RawMessage(`{}`),
+			WorkDir:    dir,
+		}
 }
 func TestProtocolValidation(t *testing.T) {
 	for _, tc := range []struct {

@@ -71,7 +71,9 @@ func TestNativeCatalogueStableAcrossOwnersAndBindsPrivateMaterial(t *testing.T) 
 }
 
 func TestNativePublicCatalogueRefusesWeakEnvironmentGuessing(t *testing.T) {
-	tool := Tool{ID: "known-check", Name: "Known installed check", Phase: "plan_check", Retry: "read_only", Environment: map[string]string{"DB_PASSWORD": "5931"}, Definition: steps.Definition{ProtocolVersion: 1, Name: "check", Version: "1", Phase: "plan_check", Retry: "read_only", Executable: "/bin/echo", ExecutableSHA256: executableDigest("/bin/echo")}}
+	executable, err := filepath.EvalSymlinks("/bin/echo")
+	require.NoError(t, err)
+	tool := Tool{ID: "known-check", Name: "Known installed check", Phase: "plan_check", Retry: "read_only", Environment: map[string]string{"DB_PASSWORD": "5931"}, Definition: steps.Definition{ProtocolVersion: 1, Name: "check", Version: "1", Phase: "plan_check", Retry: "read_only", Executable: executable, ExecutableSHA256: executableDigest(executable)}}
 	identity, err := age.GenerateX25519Identity()
 	require.NoError(t, err)
 	execution := &Executor{Tools: []Tool{tool}, Capabilities: []string{"site.read"}}
