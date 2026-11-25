@@ -145,7 +145,13 @@ jobs:
           docker buildx build --target pipeline-test-export --output "type=local,dest=$test_tools" .
           test -f "$test_tools/tofu"
           test -f "$test_tools/infracost"
-          chmod 0755 "$test_tools/tofu" "$test_tools/infracost"
+          curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --max-time 120 \
+            https://releases.hashicorp.com/terraform/1.17.2/terraform_1.17.2_linux_amd64.zip -o "$test_tools/terraform.zip"
+          echo "e6f16b2f0b137ee5729caa8c4e79a3bae4ee261acd198a1fcfa8584a6296605b  $test_tools/terraform.zip" | sha256sum -c -
+          unzip -q "$test_tools/terraform.zip" terraform -d "$test_tools"
+          rm "$test_tools/terraform.zip"
+          chmod 0755 "$test_tools/tofu" "$test_tools/infracost" "$test_tools/terraform"
+          "$test_tools/terraform" version
           "$test_tools/tofu" version
           "$test_tools/infracost" --version
           printf '%s\n' "$test_tools" >> "$GITHUB_PATH"

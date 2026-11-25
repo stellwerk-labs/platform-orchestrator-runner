@@ -54,3 +54,7 @@ The HA bootstrap must wait for the final TCP server rather than the temporary Un
 ### Preserve candidate source while forwarding qualification fixes
 
 A selected release-fixture correction after a reserved candidate receives a forward application candidate. Keep the chart candidate and its default image version aligned, preserving previous source, notes and tags.
+
+### Supply every real IaC tool to its consuming test job
+
+The ordinary and release unit jobs run the same dual-tool PostgreSQL tests. Install the already checksum-pinned Terraform version beside the shipped OpenTofu and Infracost binaries in their existing private tool directory. Preserve real execution, assertions, source/runtime inputs and all existing release controls.

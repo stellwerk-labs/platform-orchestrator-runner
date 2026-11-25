@@ -48,3 +48,7 @@ An official PostgreSQL image can briefly accept Unix-socket probes while initial
 ### Align complete-suite qualification with candidate metadata
 
 Qualify the full existing selector before reserving the forward candidate. Update the chart version, image default and installation examples together. Documentation edits alone do not change product qualification.
+
+### Job-local tool setup does not cross workflow job boundaries
+
+A tool installed in a separate backend job is absent from the unit job that runs the full PostgreSQL selector. Make that prerequisite explicit in each existing consuming job, using the same authenticated archive rather than skipping cases or substituting another executable.

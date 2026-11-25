@@ -63,3 +63,7 @@ Prepared the existing HA PostgreSQL probe with an explicit loopback TCP host and
 ### Prepare Runner and chart RC3 metadata
 
 Prepared forward application and chart notes, README references and chart version/appVersion for the reviewed readiness and qualification-budget corrections. Existing notes, application code, dependencies, workload templates and activation defaults remain unchanged.
+
+### Prepare the missing Terraform unit-job prerequisite
+
+Prepared only the existing checksum-pinned Terraform installation in the two consuming unit-job tool steps and these generic notes. Production code, dependencies, tests, limits, filters, runtime packaging and previous candidates remain unchanged. Actual Linux full-selector qualification remains required before forward candidate tagging and publication.
