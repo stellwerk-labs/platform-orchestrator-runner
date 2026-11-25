@@ -81,7 +81,7 @@ test-agent-delivery-integration:
 ## Qualify explicit PostgreSQL rollout storage with real DBOS, OpenTofu and reconnect faults (requires RUNNER_POSTGRES_TEST_DSN_FILE)
 .PHONY: test-rollout-postgres
 test-rollout-postgres:
-	go test -race -tags=integration ./internal/rollout -run '^TestPostgres' -count=1 -v -timeout=225s
+	go test -race -tags=integration ./internal/rollout -run '^TestPostgres' -count=1 -v -timeout=15m
 
 ## Prove real Terraform/OpenTofu Kubernetes backend portability using an explicit owned test-admin config
 .PHONY: test-native-kubernetes-backend

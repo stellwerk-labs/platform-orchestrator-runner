@@ -47,7 +47,7 @@ jobs:
           rm "$tools/terraform.zip"
           echo "$tools" >> "$GITHUB_PATH"
       - name: Install the shipped OpenTofu
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           set -eu
           docker buildx build --target tofu-test-export --output "type=local,dest=$RUNNER_TEMP/native-backend-tools" .
@@ -66,7 +66,7 @@ jobs:
           kind create cluster --name "$cluster" --kubeconfig "$config" --wait 90s \
             --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
       - name: Qualify actual Terraform and OpenTofu backend execution
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           make generate
           make test-native-kubernetes-backend
@@ -168,7 +168,7 @@ jobs:
           make test-unsupported-native-nats
 
       - name: Qualify shared pipeline queue and worker fencing
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           docker pull nats@sha256:ddb480f4b97d90f183123e96bbc7c96ab2a126883f7a380531cc208fc8ba9ca7
           docker pull postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e

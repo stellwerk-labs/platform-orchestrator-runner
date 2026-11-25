@@ -46,3 +46,7 @@ Keep approved-tool validation strict about regular files and frozen digests. Ret
 ### Align forward Runner and chart candidate metadata
 
 A correction after a reserved application candidate receives a forward version. Keep the chart candidate and its default image version aligned with the corrected Runner. Preserve previous notes and tags.
+
+### Check final PostgreSQL TCP readiness in the HA fixture
+
+The HA bootstrap must wait for the final TCP server rather than the temporary Unix-only initialization server. Keep the existing bounded probe and cleanup, adding only its loopback host. Allow the existing cold OpenTofu setup and backend E2E outer steps 10 minutes each without changing the Native job cap, actual Go-test deadline or checkout. The complete PostgreSQL selector has a 15-minute aggregate in both existing callers, with 20 minutes for the complete HA workflow step. Production behavior and each internal deadline assertion remain unchanged.

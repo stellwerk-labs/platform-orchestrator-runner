@@ -141,7 +141,7 @@ jobs:
           make test-agent-delivery-integration
 
       - name: Qualify shared pipeline queue and worker fencing
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           docker pull nats@sha256:ddb480f4b97d90f183123e96bbc7c96ab2a126883f7a380531cc208fc8ba9ca7
           docker pull postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e

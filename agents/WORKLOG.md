@@ -55,3 +55,7 @@ Updated the existing protocol fixture to retain an installed regular shell or pr
 ### Prepare Runner and chart RC2 metadata
 
 Prepared forward application and chart candidate notes, README references and chart version/appVersion for the reviewed portable test fixtures. Existing candidate notes, runtime, dependencies, templates and activation defaults remain unchanged.
+
+### Correct the HA bootstrap endpoint
+
+Prepared the existing HA PostgreSQL probe with an explicit loopback TCP host and changed only the existing cold OpenTofu setup and backend E2E outer allowances from 5 to 10 minutes. Aligned the complete PostgreSQL selector to a 15-minute aggregate in the script and standalone Make target, and both complete HA workflow steps to 20 minutes. Application code, dependencies, runtime security and individual deadline assertions are unchanged. A real initialization-barrier regression and the full existing HA target are required before source signing.

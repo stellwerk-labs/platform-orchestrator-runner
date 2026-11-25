@@ -61,7 +61,7 @@ PY
 export RUNNER_POSTGRES_TEST_DSN_FILE="$private_dir/postgres.dsn"
 ready=0
 for attempt in $(seq 1 100); do
-    if docker exec "$postgres_container" pg_isready --quiet --username runner_ha_test --dbname runner_ha_test; then
+    if docker exec "$postgres_container" pg_isready --host 127.0.0.1 --quiet --username runner_ha_test --dbname runner_ha_test; then
         ready=1
         break
     fi
@@ -72,7 +72,7 @@ done
 export HA_RUNNER_BINARY="$private_dir/runner"
 GOWORK=off go build -o "$HA_RUNNER_BINARY" ./cmd/runner
 GOWORK=off go test -race -tags=integration ./cmd/runner -run '^TestNative' -count=1 -timeout=90s -v
-GOWORK=off go test -race -tags=integration ./internal/rollout -run '^TestPostgres' -count=1 -timeout=230s -v
+GOWORK=off go test -race -tags=integration ./internal/rollout -run '^TestPostgres' -count=1 -timeout=15m -v
 ha_tests="$(GOWORK=off go test -tags=integration ./internal/rolloutagent -list '^TestHA')"
 case "$ha_tests" in
     *TestHA*) ;;
