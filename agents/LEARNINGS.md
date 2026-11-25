@@ -52,3 +52,7 @@ Qualify the full existing selector before reserving the forward candidate. Updat
 ### Job-local tool setup does not cross workflow job boundaries
 
 A tool installed in a separate backend job is absent from the unit job that runs the full PostgreSQL selector. Make that prerequisite explicit in each existing consuming job, using the same authenticated archive rather than skipping cases or substituting another executable.
+
+### Prepare matched forward candidate metadata
+
+Release metadata is separate from qualification setup. Advance installation examples and paired chart/image versions together while retaining the customer-facing behavior and recovery guidance.

@@ -58,3 +58,7 @@ A selected release-fixture correction after a reserved candidate receives a forw
 ### Supply every real IaC tool to its consuming test job
 
 The ordinary and release unit jobs run the same dual-tool PostgreSQL tests. Install the already checksum-pinned Terraform version beside the shipped OpenTofu and Infracost binaries in their existing private tool directory. Preserve real execution, assertions, source/runtime inputs and all existing release controls.
+
+### Prepare matched forward candidate metadata
+
+Reserve the forward application candidate only after selected source qualification succeeds. Keep the chart version and default Runner image aligned, preserving previous candidate notes and tags.

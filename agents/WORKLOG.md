@@ -67,3 +67,7 @@ Prepared forward application and chart notes, README references and chart versio
 ### Prepare the missing Terraform unit-job prerequisite
 
 Prepared only the existing checksum-pinned Terraform installation in the two consuming unit-job tool steps and these generic notes. Production code, dependencies, tests, limits, filters, runtime packaging and previous candidates remain unchanged. Actual Linux full-selector qualification remains required before forward candidate tagging and publication.
+
+### Prepare matched forward candidate metadata
+
+Prepared Runner and chart RC4 notes, README references and chart version/appVersion as a separate metadata change. Existing candidate notes, application code, dependencies, templates, security and activation defaults remain unchanged. Application and publication are still pending.
