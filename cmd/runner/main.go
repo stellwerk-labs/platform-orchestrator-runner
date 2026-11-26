@@ -306,7 +306,7 @@ func publishDeploymentResultToGateway(ctx context.Context, cfg *config.StandardM
 		return err
 	}
 	if cfg.Gateway.OutboxDir == "" {
-		return client.PostResults(ctx, cfg.DeploymentID, cfg.DeploymentToken, result)
+		return client.PostResultsRetrying(ctx, cfg.DeploymentID, cfg.DeploymentToken, result)
 	}
 	outbox, err := gatewayapi.NewOutbox(cfg.Gateway.OutboxDir, client)
 	if err != nil {

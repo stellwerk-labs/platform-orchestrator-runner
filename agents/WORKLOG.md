@@ -71,3 +71,7 @@ Prepared only the existing checksum-pinned Terraform installation in the two con
 ### Prepare matched forward candidate metadata
 
 Prepared Runner and chart RC4 notes, README references and chart version/appVersion as a separate metadata change. Existing candidate notes, application code, dependencies, templates, security and activation defaults remain unchanged. Application and publication are still pending.
+
+## 2026-11-26: Retry the deployment result without an outbox
+
+Deployment Jobs on the no-outbox path (chart `simple` and `airgap` modes, DP-direct Jobs) posted their result once, so a gateway restart lost it and the deployment never finished. `Client.PostResultsRetrying` repeats transport errors and 429/502/503/504 with backoff from 1s to 15s for at most 2 minutes; other statuses stay final. The gateway publishes results under a stable message ID with a 10 minute duplicate window and DP applies each result event once, so repeats are harmless. `PostResults` stays single-shot for the outbox, which must spool at once. The integration harness also restarts and waits for the gateway after the kind node joins the compose network.

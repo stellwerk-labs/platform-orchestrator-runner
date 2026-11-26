@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/config"
 	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/limitedlogsbuffer"
+	"github.com/stellwerk-labs/platform-orchestrator-runner/internal/platformorchestratorapi"
 )
 
 var limitedLogsBuffer = limitedlogsbuffer.NewLimitedLogsBuffer(&bytes.Buffer{}, maxLogsBufferSize)
@@ -88,4 +93,22 @@ func TestMainInner(t *testing.T) {
 		_, err := mainInner(context.Background(), limitedLogsBuffer)
 		require.ErrorContains(t, err, "invalid mode: unknown-mode")
 	})
+}
+
+func TestDeploymentResultWithoutOutboxRetriesUnavailableGateway(t *testing.T) {
+	var attempts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) == 1 {
+			response.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		response.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	cfg := &config.StandardModeConfiguration{
+		OrgID: "org", RunnerID: "runner", DeploymentID: "deployment", DeploymentToken: "token",
+		Gateway: config.GatewayClientConfiguration{URL: server.URL},
+	}
+	require.NoError(t, publishDeploymentResultToGateway(t.Context(), cfg, platformorchestratorapi.DeploymentResultsUpdateBody{}))
+	require.Equal(t, int64(2), attempts.Load())
 }

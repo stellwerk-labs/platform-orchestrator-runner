@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +20,14 @@ import (
 )
 
 const maxBundleBytes int64 = 64 << 20
+
+// A deployment Job re-posts its result for at most resultRetryBudget. The gateway publishes the
+// result under a stable message ID inside a 10 minute duplicate window, and DP applies a result once
+// per event ID, so a repeat after a lost response is harmless.
+const (
+	resultRetryBudget   = 2 * time.Minute
+	maxResultRetryDelay = 15 * time.Second
+)
 
 type ClientConfig struct {
 	BaseURL        string
@@ -40,6 +49,8 @@ type Client struct {
 	privateKey     []byte
 	httpClient     *http.Client
 	now            func() time.Time
+	// resultRetryDelay is the first pause of PostResultsRetrying; it doubles up to maxResultRetryDelay.
+	resultRetryDelay time.Duration
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
@@ -67,6 +78,7 @@ func NewClient(config ClientConfig) (*Client, error) {
 		baseURL: parsed.String(), organizationID: config.OrganizationID, runnerID: config.RunnerID, runnerUUID: config.RunnerUUID,
 		privateKey: append([]byte(nil), config.PrivateKey...),
 		httpClient: &http.Client{Transport: transport, Timeout: timeout}, now: time.Now,
+		resultRetryDelay: time.Second,
 	}, nil
 }
 
@@ -205,19 +217,72 @@ func (c *Client) GetBundle(ctx context.Context, deploymentID, deploymentToken st
 	return contents, nil
 }
 
+// PostResults makes one attempt, so the outbox can spool a failed result at once.
 func (c *Client) PostResults(ctx context.Context, deploymentID, deploymentToken string, results any) error {
 	contents, err := json.Marshal(results)
 	if err != nil {
 		return err
 	}
-	target := c.runnerURL("/deployments/" + url.PathEscape(deploymentID) + "/results")
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(contents))
+	request, err := c.resultRequest(ctx, deploymentID, deploymentToken, contents)
 	if err != nil {
 		return err
 	}
+	return c.expectStatus(request, http.StatusAccepted, "persist deployment result")
+}
+
+// PostResultsRetrying is for Jobs without an outbox: it rides out a gateway that is restarting or
+// briefly cannot persist by repeating transport errors and 429/502/503/504 with exponential backoff,
+// for at most resultRetryBudget. Any other status is final.
+func (c *Client) PostResultsRetrying(ctx context.Context, deploymentID, deploymentToken string, results any) error {
+	contents, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, resultRetryBudget)
+	defer cancel()
+	delay := c.resultRetryDelay
+	for attempt := 1; ; attempt++ {
+		request, err := c.resultRequest(ctx, deploymentID, deploymentToken, contents)
+		if err != nil {
+			return err
+		}
+		err = c.expectStatus(request, http.StatusAccepted, "persist deployment result")
+		if err == nil || !retryableResultError(err) {
+			return err
+		}
+		slog.WarnContext(ctx, "runner gateway did not accept the deployment result; retrying", "attempt", attempt, "err", err)
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(delay):
+		}
+		delay = min(2*delay, maxResultRetryDelay)
+	}
+}
+
+func (c *Client) resultRequest(ctx context.Context, deploymentID, deploymentToken string, contents []byte) (*http.Request, error) {
+	target := c.runnerURL("/deployments/" + url.PathEscape(deploymentID) + "/results")
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(contents))
+	if err != nil {
+		return nil, err
+	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(DeploymentTokenHeader, deploymentToken)
-	return c.expectStatus(request, http.StatusAccepted, "persist deployment result")
+	return request, nil
+}
+
+// retryableResultError is true for transport failures (no HTTP status) and for statuses that mean
+// "try again": 429, and 502/503/504 from the gateway or its proxy.
+func retryableResultError(err error) bool {
+	var status *HTTPStatusError
+	if !errors.As(err, &status) {
+		return true
+	}
+	switch status.StatusCode {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
 }
 
 func (c *Client) PutLogs(ctx context.Context, environmentID, deploymentID, deploymentToken string, content io.Reader) error {
