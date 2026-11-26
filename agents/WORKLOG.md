@@ -79,3 +79,7 @@ Deployment Jobs on the no-outbox path (chart `simple` and `airgap` modes, DP-dir
 ## 2026-11-26: Open chart pod metadata and placement maps
 
 The values schema closed `podAnnotations`, `podLabels`, `nodeSelector` and `affinity` with `additionalProperties: false` and no properties, so any user entry failed `helm install` (since chart 0.4.0). The three Kubernetes string maps now accept string values and `affinity` accepts any object. `scripts/chart-pod-placement_test.sh` renders both the agent Deployment and the native worker StatefulSet with all four values and rejects a non-string annotation; both chart validation jobs run it.
+
+### Prepare Runner and chart RC5 metadata
+
+Prepared Runner and chart RC5 notes, README references and chart version/appVersion as a separate metadata change on top of the gateway result retry, its harness wait, the clean-order fix and the chart schema fix. Earlier candidate notes, dependencies and activation defaults remain unchanged.
