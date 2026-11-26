@@ -78,7 +78,7 @@ Deployment Jobs on the no-outbox path (chart `simple` and `airgap` modes, DP-dir
 
 ## 2026-11-26: Open chart pod metadata and placement maps
 
-The values schema closed `podAnnotations`, `podLabels`, `nodeSelector` and `affinity` with `additionalProperties: false` and no properties, so any user entry failed `helm install` (since chart 0.4.0). The three Kubernetes string maps now accept string values and `affinity` accepts any object. `scripts/chart-pod-placement_test.sh` renders both the agent Deployment and the native worker StatefulSet with all four values and rejects a non-string annotation; both chart validation jobs run it.
+The values schema closed `podAnnotations`, `podLabels`, `nodeSelector` and `affinity` with `additionalProperties: false` and no properties, so any user entry failed `helm install` in every published chart. The three Kubernetes string maps now accept string values and `affinity` accepts any object. `scripts/chart-pod-placement_test.sh` renders both the agent Deployment and the native worker StatefulSet with all four values and rejects a non-string annotation; both chart validation jobs run it.
 
 ### Prepare Runner and chart RC5 metadata
 

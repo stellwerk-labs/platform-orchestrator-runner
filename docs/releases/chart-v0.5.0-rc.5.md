@@ -9,4 +9,5 @@ Runner UUID and verification key. Follow the documented
 [consumer cutover](../native-diode-ingress.md#existing-native-exporter-cutover)
 when upgrading an existing Native diode exporter to preserve queued commands.
 
-`podAnnotations`, `podLabels`, `nodeSelector` and `affinity` now accept values; the schema rejected every entry since chart 0.4.0.
+`podAnnotations`, `podLabels` and `nodeSelector` now accept string values and
+`affinity` accepts any object; earlier chart releases rejected every entry.

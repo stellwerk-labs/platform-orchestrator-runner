@@ -62,3 +62,7 @@ The ordinary and release unit jobs run the same dual-tool PostgreSQL tests. Inst
 ### Prepare matched forward candidate metadata
 
 Reserve the forward application candidate only after selected source qualification succeeds. Keep the chart version and default Runner image aligned, preserving previous candidate notes and tags.
+
+## 2026-11-26: Bounded deployment result retry without an outbox
+
+Jobs without a gateway outbox retry their result for at most 2 minutes, from 1 to 15 seconds apart, on transport errors and 429/502/503/504. The gateway publishes the result under a stable message ID inside a 10 minute duplicate window and Data Plane applies a result event once, so a repeat after a lost response is harmless. A 403 stays final: a real denial must not be repeated, and the gateway should instead answer 503 when it cannot reach the Data Plane authority. The outbox keeps a single attempt because it must spool at once and its flusher already retries every 5 seconds.
