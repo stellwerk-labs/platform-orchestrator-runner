@@ -75,3 +75,7 @@ Prepared Runner and chart RC4 notes, README references and chart version/appVers
 ## 2026-11-26: Retry the deployment result without an outbox
 
 Deployment Jobs on the no-outbox path (chart `simple` and `airgap` modes, DP-direct Jobs) posted their result once, so a gateway restart lost it and the deployment never finished. `Client.PostResultsRetrying` repeats transport errors and 429/502/503/504 with backoff from 1s to 15s for at most 2 minutes; other statuses stay final. The gateway publishes results under a stable message ID with a 10 minute duplicate window and DP applies each result event once, so repeats are harmless. `PostResults` stays single-shot for the outbox, which must spool at once. The integration harness also restarts and waits for the gateway after the kind node joins the compose network.
+
+## 2026-11-26: Open chart pod metadata and placement maps
+
+The values schema closed `podAnnotations`, `podLabels`, `nodeSelector` and `affinity` with `additionalProperties: false` and no properties, so any user entry failed `helm install` (since chart 0.4.0). The three Kubernetes string maps now accept string values and `affinity` accepts any object. `scripts/chart-pod-placement_test.sh` renders both the agent Deployment and the native worker StatefulSet with all four values and rejects a non-string annotation; both chart validation jobs run it.

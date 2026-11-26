@@ -294,6 +294,9 @@ jobs:
       - name: Test runner gateway modes
         run: bash scripts/chart-gateway-modes_test.sh
 
+      - name: Test pod placement values
+        run: bash scripts/chart-pod-placement_test.sh
+
   stable-release:
     if: github.repository == 'stellwerk-labs/platform-orchestrator-runner' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc.')
     needs:
