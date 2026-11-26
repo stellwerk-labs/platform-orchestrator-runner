@@ -26,3 +26,7 @@ See DECISIONS.md and LEARNINGS.md for the selected architecture and artifact les
 ## 2026-11-13: Public Runner source preparation
 
 Removed the private installation identifier from the 3.3.0 residual-risk disposition before public source qualification. The accepted version family, exact binaries, advisory inventory and unresolved applicability remain unchanged. No workflow or application behavior changed.
+
+## 2026-11-26: Draft candidate release until the image is verified
+
+`build-and-push.yaml` `candidate-release` now reserves a draft prerelease and ends with `gh release edit "$CANDIDATE_TAG" --draft=false --latest=false` after the push and `imagetools inspect`. `candidate-release_test.py` requires both commands and the create, push, inspect, publish order copied from the stable checks. `candidate-release_test.py` and `release_build_context_test.py` pass, and removing either `--draft` or the publish step fails the test; actionlint was unavailable. See DECISIONS.md.

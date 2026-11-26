@@ -23,3 +23,7 @@ The stock release links deprecated OpenPGP code; the selected private-cache buil
 Authenticate module archives before those exact hash-guarded edits; preserve original module identities for actual binary scanning.
 Current v2 changes hosted authentication and performs dashboard/telemetry calls, so it does not satisfy the pricing-key-only and pricing-only network contract.
 Patch maintenance is an explicit build obligation, not an unmodified-vendor claim.
+
+## 2026-11-26: Candidate releases stay drafts until the image is verified
+
+`candidate-release` creates the GitHub release as a draft and publishes it with `--draft=false --latest=false` only after the image push and the immutable-digest inspection, as Runner's stable path and the Data Plane candidate path already do. A failed candidate no longer leaves a published prerelease without its image. This reverses the earlier `--draft` and `gh release edit` exclusions in `scripts/candidate-release_test.py`, which carried no stated reason. Accepted: `release-preflight` has only `contents: read` and probably cannot see drafts, so a leftover draft from a failed run is found at `candidate-release`, the same as in the Data Plane.
