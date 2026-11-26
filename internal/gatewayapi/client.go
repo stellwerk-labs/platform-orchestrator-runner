@@ -272,7 +272,8 @@ func (c *Client) resultRequest(ctx context.Context, deploymentID, deploymentToke
 }
 
 // retryableResultError is true for transport failures (no HTTP status) and for statuses that mean
-// "try again": 429, and 502/503/504 from the gateway or its proxy.
+// "try again": 429, and 502/503/504 from the gateway or its proxy. 400, 401 and 500 repeat
+// deterministically; a 403 can hide an unreachable DP authority, which the gateway must answer as 503.
 func retryableResultError(err error) bool {
 	var status *HTTPStatusError
 	if !errors.As(err, &status) {

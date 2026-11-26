@@ -60,7 +60,8 @@ func TestPostResultsRetryingWaitsForUnavailableGateway(t *testing.T) {
 
 func TestPostResultsRetryingStopsAtDeadlineWithLastStatus(t *testing.T) {
 	client, attempts := resultGateway(t, http.StatusServiceUnavailable)
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	// The deadline must land in a backoff pause, not inside an attempt, so the last status is returned.
+	ctx, cancel := context.WithTimeout(t.Context(), 400*time.Millisecond)
 	defer cancel()
 	err := postResult(ctx, client)
 	var status *HTTPStatusError
@@ -76,4 +77,15 @@ func TestPostResultsRetryingDoesNotRepeatDenial(t *testing.T) {
 	require.True(t, errors.As(err, &status), "got %v", err)
 	require.Equal(t, http.StatusForbidden, status.StatusCode)
 	require.Equal(t, int64(1), attempts.Load())
+}
+
+func TestRetryableResultErrorClassifiesStatuses(t *testing.T) {
+	for status, retryable := range map[int]bool{
+		http.StatusTooManyRequests: true, http.StatusBadGateway: true, http.StatusServiceUnavailable: true,
+		http.StatusGatewayTimeout: true, http.StatusBadRequest: false, http.StatusUnauthorized: false,
+		http.StatusForbidden: false, http.StatusInternalServerError: false,
+	} {
+		require.Equal(t, retryable, retryableResultError(&HTTPStatusError{StatusCode: status}), "status %d", status)
+	}
+	require.True(t, retryableResultError(errors.New("connection refused")))
 }
