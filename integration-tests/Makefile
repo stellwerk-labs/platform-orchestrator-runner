@@ -74,11 +74,12 @@ configure-cluster:
 	$(KUBECTL) create secret generic -n $(DEFAULT_K8S_RES) aws-creds --from-literal=access_key_id="FAKE_ACCESS_KEY_ID" --from-literal=secret_access_key="SECRET_ACCESS_KEY"
 	@printf '{"cluster_data":{"certificate_authority_data": "%s", "server": "%s"},"auth":{"client_certificate_data": "%s", "client_key_data": "%s"}}\n' "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.certificate-authority-data}' --raw )" "$$($(KUBECTL_INTERNAL) config view -o jsonpath='{.clusters[?(@.name == "$(CLUSTER_NAME)")].cluster.server}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-certificate-data}' --raw )" "$$( $(KUBECTL_INTERNAL) config view -o jsonpath='{.users[?(@.name == "$(CLUSTER_NAME)")].user.client-key-data}' --raw )" > $(RUNNER_CONFIGURATION)
 
+# The kind node is attached to the compose network; delete it first so compose can remove that network.
 .PHONY: clean
 clean:
+	kind delete cluster --name $(NAME) --kubeconfig $(KUBECONFIG)
 	if [ -f compose.yaml ]; then docker compose down -v --remove-orphans; fi
 	rm -rfv .kind-e2e .score-compose compose.yaml
-	kind delete cluster --name $(NAME) --kubeconfig $(KUBECONFIG)
 
 .PHONY: test-integration-logs
 test-integration-logs:
