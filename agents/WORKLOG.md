@@ -87,3 +87,7 @@ Prepared Runner and chart RC5 notes, README references and chart version/appVers
 ## 2026-11-27: Smaller Runner image for 3.4.0-rc.6
 
 Built the Runner, OpenTofu and Infracost executables with `-w` (Runner also `-trimpath`) and dropped saved `testdata/` from the three licence collectors after proving no linked package embeds from it. Re-bootstrapped the corresponding-source hash chain (see LEARNINGS 2026-11-27) and amended both availability texts. Compressed image 175 to 106 MiB (arm64) and 187 to 114 MiB (amd64). Drafted `docs/releases/v3.4.0-rc.6.md` with the Native catalogue update step (DECISIONS 2026-11-27). Version metadata is not bumped yet.
+
+### Prepare Runner and chart RC6 metadata
+
+Prepared Runner and chart RC6 notes, README references and chart version/appVersion as a separate metadata change on top of the smaller image and the stripped-executable refusal in the binary scan. Earlier candidate notes, dependencies and activation defaults remain unchanged.
