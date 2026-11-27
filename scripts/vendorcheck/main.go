@@ -100,8 +100,8 @@ func check(release, binary, textPath, textExit, jsonPath string) error {
 }
 
 func checkRelease(p policy, release string) error {
-	if p.SchemaVersion != 1 || p.ReleaseFamily != "v3.3.0" || !regexp.MustCompile(`^v3\.3\.0(-rc\.[1-9][0-9]*)?$`).MatchString(release) {
-		return fmt.Errorf("release is outside the reviewed v3.3.0 family")
+	if p.SchemaVersion != 1 || p.ReleaseFamily != "v3.3.1" || !regexp.MustCompile(`^v3\.3\.1(-rc\.[1-9][0-9]*)?$`).MatchString(release) {
+		return fmt.Errorf("release is outside the reviewed v3.3.1 family")
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func checkReport(data []byte, p policy, want artifact) error {
 					return fmt.Errorf("malformed scanner finding")
 				}
 				ids[id] = true
-				b, err := json.Marshal(body)
+				b, err := json.Marshal(canonicalFinding(body))
 				if err != nil {
 					return err
 				}
@@ -185,7 +185,7 @@ func checkReport(data []byte, p policy, want artifact) error {
 			return fmt.Errorf("missing reviewed advisory %s", id)
 		}
 	}
-	// Preserve every module/package/symbol tuple, fixed version and trace frame.
+	// Preserve every package/symbol tuple, module-level record and trace frame.
 	// Sorting removes emission-order variation; duplicates still change the hash.
 	sort.Strings(findings)
 	h := sha256.Sum256([]byte(strings.Join(findings, "\n") + "\n"))
@@ -193,6 +193,29 @@ func checkReport(data []byte, p policy, want artifact) error {
 		return fmt.Errorf("finding tuples differ from the reviewed inventory")
 	}
 	return nil
+}
+
+// canonicalFinding drops the module, version and fixed version of package and
+// symbol records before hashing. In binary mode govulncheck v1.9.0 labels a
+// package with the first binary module whose path prefixes it, iterating a Go map
+// (findModule, "not first match, best match"), so packages under nested modules
+// such as go.opentelemetry.io/otel/trace get a random label between identical
+// scans. Module-level records keep all three fields and still bind every
+// advisory to its module and fixed version.
+func canonicalFinding(body map[string]any) map[string]any {
+	trace, _ := body["trace"].([]any)
+	attributed := false
+	for _, value := range trace {
+		if frame, ok := value.(map[string]any); ok && frame["package"] != nil {
+			delete(frame, "module")
+			delete(frame, "version")
+			attributed = true
+		}
+	}
+	if attributed {
+		delete(body, "fixed_version")
+	}
+	return body
 }
 
 func uniqueValue(d *json.Decoder, depth int) (any, error) {

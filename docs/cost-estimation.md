@@ -4,7 +4,7 @@ Cost estimation is optional and disabled by default.
 The installation Admin enables it and configures a customer-owned Infracost API key.
 The dispatch environment authoritatively supplies `COST_ESTIMATION_ENABLED` and `INFRACOST_API_KEY`; a missing key leaves estimation unavailable and never blocks infrastructure execution.
 
-The Runner invokes its image-owned classic Infracost `v0.10.49` executable (packaged build `v0.10.49+stellwerk.1`, with its bounded dependency compatibility/security patch documented in the third-party notices) after successful manual and Drift plan inspection.
+The Runner invokes its image-owned classic Infracost `v0.10.51` executable (packaged build `v0.10.51+stellwerk.1`, with its bounded dependency compatibility/security patch documented in the third-party notices) after successful manual and Drift plan inspection.
 The plan is parsed locally; only product/price filter queries go to `https://pricing.api.infracost.io`.
 Pricing attributes such as cloud region and instance class are disclosed.
 Cloud uploads, organization settings, events, update checks, envfile loading and persisted price caches are disabled.

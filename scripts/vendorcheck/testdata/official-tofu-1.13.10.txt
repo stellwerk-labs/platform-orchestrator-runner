@@ -6,8 +6,8 @@ Checking the binary against the vulnerabilities...
 
 The package pattern matched the following root package:
   github.com/opentofu/opentofu
-Govulncheck scanned the following 245 modules and the go1.27.3 standard library:
-  github.com/opentofu/opentofu@v1.13.2
+Govulncheck scanned the following 245 modules and the go1.27.4 standard library:
+  github.com/opentofu/opentofu@v1.13.10
   cel.dev/expr@v0.25.2
   cloud.google.com/go@v0.123.0
   cloud.google.com/go/auth@v0.23.0
@@ -255,7 +255,49 @@ Govulncheck scanned the following 245 modules and the go1.27.3 standard library:
 
 === Symbol Results ===
 
-Vulnerability #1: GO-2026-6866
+Vulnerability #1: GO-2026-6975
+    Memory allocation amplification in W3C baggage parsing in
+    go.opentelemetry.io/otel
+  More info: https://pkg.go.dev/vuln/GO-2026-6975
+  Module: go.opentelemetry.io/otel
+    Found in: go.opentelemetry.io/otel@v1.45.0
+    Fixed in: go.opentelemetry.io/otel@v1.47.0
+    Vulnerable symbols found:
+      #1: baggage.Parse
+      #2: propagation.Baggage.Extract
+
+Vulnerability #2: GO-2026-6974
+    AttributeValueLengthLimit bypass via U+FFFD runes in
+    go.opentelemetry.io/otel/sdk
+  More info: https://pkg.go.dev/vuln/GO-2026-6974
+  Module: go.opentelemetry.io/otel
+    Found in: go.opentelemetry.io/otel@v1.45.0
+    Fixed in: N/A
+    Vulnerable symbols found:
+      #1: trace.autoSpan.AddEvent
+      #2: trace.autoSpan.AddLink
+      #3: trace.autoSpan.RecordError
+      #4: trace.autoSpan.SetAttributes
+      #5: trace.autoTracer.Start
+
+  Module: go.opentelemetry.io/otel/sdk
+    Found in: go.opentelemetry.io/otel/sdk@v1.45.0
+    Fixed in: go.opentelemetry.io/otel/sdk@v1.47.0
+    Vulnerable symbols found:
+      #1: attrnorm.Truncate
+      #2: attrnorm.Truncate
+      #3: attrnorm.TruncateValue
+      #4: attrnorm.TruncateValue
+
+  Module: go.opentelemetry.io/otel/sdk/log
+    Found in: go.opentelemetry.io/otel/sdk/log@v0.21.0
+    Fixed in: go.opentelemetry.io/otel/sdk/log@v1.47.0
+
+  Module: go.opentelemetry.io/otel/trace
+    Found in: go.opentelemetry.io/otel/trace@v1.45.0
+    Fixed in: go.opentelemetry.io/otel/trace@v1.47.0
+
+Vulnerability #3: GO-2026-6866
     Check all ancestor namespace transitions when rendering raw text in html in
     golang.org/x/net
   More info: https://pkg.go.dev/vuln/GO-2026-6866
@@ -265,7 +307,7 @@ Vulnerability #1: GO-2026-6866
     Vulnerable symbols found:
       #1: html.Render
 
-Vulnerability #2: GO-2026-6865
+Vulnerability #4: GO-2026-6865
     Panic on two-block frames in github.com/klauspost/compress
   More info: https://pkg.go.dev/vuln/GO-2026-6865
   Module: github.com/klauspost/compress
@@ -279,7 +321,7 @@ Vulnerability #2: GO-2026-6865
       #5: huff0.EstimateSizes
       Use '-show traces' to see the other 2 found symbols
 
-Vulnerability #3: GO-2026-6860
+Vulnerability #5: GO-2026-6860
     Avoid quadratic complexity when coalescing text nodes in html in
     golang.org/x/net
   More info: https://pkg.go.dev/vuln/GO-2026-6860
@@ -292,21 +334,7 @@ Vulnerability #3: GO-2026-6860
       #3: html.ParseFragmentWithOptions
       #4: html.ParseWithOptions
 
-Vulnerability #4: GO-2026-6859
-    HTTP/1 server crash due to MaxBytesReader header race in net/http
-  More info: https://pkg.go.dev/vuln/GO-2026-6859
-  Standard library
-    Found in: net/http@go1.27.3
-    Fixed in: net/http@go1.27.4
-    Vulnerable symbols found:
-      #1: http.CanonicalHeaderKey
-      #2: http.Client.CloseIdleConnections
-      #3: http.Client.Do
-      #4: http.Client.Get
-      #5: http.Client.Head
-      Use '-show traces' to see the other 144 found symbols
-
-Vulnerability #5: GO-2026-6617
+Vulnerability #6: GO-2026-6617
     HTTP/2 server crash due to HPACK encoder race in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6617
   Module: golang.org/x/net
@@ -320,7 +348,7 @@ Vulnerability #5: GO-2026-6617
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #6: GO-2026-6612
+Vulnerability #7: GO-2026-6612
     Double flow control refund on HTTP/2 server streams in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6612
   Module: golang.org/x/net
@@ -334,7 +362,7 @@ Vulnerability #6: GO-2026-6612
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #7: GO-2026-6611
+Vulnerability #8: GO-2026-6611
     Excessive CPU consumption from repeated initial window changes in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6611
   Module: golang.org/x/net
@@ -348,7 +376,7 @@ Vulnerability #7: GO-2026-6611
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 328 found symbols
 
-Vulnerability #8: GO-2026-6610
+Vulnerability #9: GO-2026-6610
     HTTP/2 transport accepts malformed framing-related headers in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6610
   Module: golang.org/x/net
@@ -362,7 +390,7 @@ Vulnerability #8: GO-2026-6610
       #5: http2.Transport.NewClientConn
       Use '-show traces' to see the other 35 found symbols
 
-Vulnerability #9: GO-2026-6603
+Vulnerability #10: GO-2026-6603
     HTTP/2 server memory exhaustion due to Trailer headers in net/http
   More info: https://pkg.go.dev/vuln/GO-2026-6603
   Module: golang.org/x/net
@@ -376,7 +404,7 @@ Vulnerability #9: GO-2026-6603
       #5: http2.ClientConn.Ping
       Use '-show traces' to see the other 323 found symbols
 
-Vulnerability #10: GO-2026-6443
+Vulnerability #11: GO-2026-6443
     Server panic via missing authority or Host headers in google.golang.org/grpc
   More info: https://pkg.go.dev/vuln/GO-2026-6443
   Module: google.golang.org/grpc
@@ -386,7 +414,7 @@ Vulnerability #10: GO-2026-6443
       #1: server.RouteAndProcess
       #2: transport.http2Server.HandleStreams
 
-Vulnerability #11: GO-2026-6180
+Vulnerability #12: GO-2026-6180
     Ignore unrelated, unauthenticated hashes in Lookup in golang.org/x/mod/sumdb
   More info: https://pkg.go.dev/vuln/GO-2026-6180
   Module: golang.org/x/mod
@@ -395,7 +423,7 @@ Vulnerability #11: GO-2026-6180
     Vulnerable symbols found:
       #1: sumdb.Client.Lookup
 
-Vulnerability #12: GO-2026-6179
+Vulnerability #13: GO-2026-6179
     Fix transparency log tile verification bypass in golang.org/x/mod/sumdb/tlog
   More info: https://pkg.go.dev/vuln/GO-2026-6179
   Module: golang.org/x/mod
@@ -404,7 +432,7 @@ Vulnerability #12: GO-2026-6179
     Vulnerable symbols found:
       #1: tlog.tileHashReader.ReadHashes
 
-Vulnerability #13: GO-2026-5932
+Vulnerability #14: GO-2026-5932
     The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design,
     and has known security issues
   More info: https://pkg.go.dev/vuln/GO-2026-5932
@@ -427,7 +455,7 @@ No other vulnerabilities found.
 
 No other vulnerabilities found.
 
-Your code is affected by 13 vulnerabilities from 5 modules and the Go standard library.
+Your code is affected by 14 vulnerabilities from 7 modules.
 This scan found no other vulnerabilities in packages you import or modules you
 require.
 exit status 3

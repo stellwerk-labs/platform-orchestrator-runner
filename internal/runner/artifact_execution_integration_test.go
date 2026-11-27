@@ -119,7 +119,7 @@ func TestArtifactExecutionPreservesLegacyHistory(t *testing.T) {
 			t.Run("first managed v1", func(t *testing.T) {
 				deploy(t, managedRevision, "v1", "1.0.0", "managed", true)
 				if useLegacyEngine {
-					require.Equal(t, "1.13.2", readState(t).TerraformVersion, "the patched engine must write the updated state")
+					require.Equal(t, "1.13.10", readState(t).TerraformVersion, "the patched engine must write the updated state")
 				}
 			})
 			t.Run("managed external artifact without digest", func(t *testing.T) { deploy(t, managedRevision, "managed", "1.1.0", "managed", true) })
