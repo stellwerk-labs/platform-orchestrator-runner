@@ -117,13 +117,15 @@ class CandidateReleaseTests(unittest.TestCase):
         for required in ("github.repository == 'stellwerk-labs/platform-orchestrator-runner'",
                          "github.event_name == 'workflow_dispatch'", "environment: public-release-candidate",
                          "- release-preflight", "- test-unit", "- test-integration", "- helm-validate",
-                         "--verify-tag --prerelease --latest=false",
+                         "gh release create \"$CANDIDATE_TAG\" --verify-tag --draft --prerelease --latest=false",
+                         "gh release edit \"$CANDIDATE_TAG\" --draft=false --latest=false",
                          "ref: ${{ inputs.candidate_sha }}", "--check-image-absent \"$GITHUB_REPOSITORY\""):
             self.assertIn(required, publication)
         for forbidden in ("git tag ", ":latest", "--force"):
             self.assertNotIn(forbidden, publication)
-        self.assertNotIn("--draft", publication)
-        self.assertNotIn("gh release edit", publication)
+        self.assertLess(publication.index("gh release create"), publication.index("docker/build-push-action@"))
+        self.assertLess(publication.index("docker/build-push-action@"), publication.index("docker buildx imagetools inspect"))
+        self.assertLess(publication.index("docker buildx imagetools inspect"), publication.index("gh release edit"))
         preflight = jobs["release-preflight"]
         self.assertIn("/environments/public-release-candidate", preflight)
         self.assertIn("if: github.event_name == 'workflow_dispatch'", preflight)

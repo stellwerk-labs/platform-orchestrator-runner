@@ -374,13 +374,13 @@ jobs:
             --environment-json "$RUNNER_TEMP/candidate-environment.json" \
             --check-image-absent "$GITHUB_REPOSITORY"
 
-      - name: Reserve candidate release without creating a tag or changing latest
+      - name: Reserve draft candidate release without creating a tag or changing latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
         run: |
           set -euo pipefail
-          gh release create "$CANDIDATE_TAG" --verify-tag --prerelease --latest=false \
+          gh release create "$CANDIDATE_TAG" --verify-tag --draft --prerelease --latest=false \
             --title "$CANDIDATE_TAG" --notes-file "docs/releases/$CANDIDATE_TAG.md"
 
       - name: Login to GitHub Container Registry
@@ -419,3 +419,11 @@ jobs:
           set -euo pipefail
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           docker buildx imagetools inspect "ghcr.io/stellwerk-labs/platform-orchestrator-runner@$IMAGE_DIGEST"
+
+      - name: Publish verified candidate GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$CANDIDATE_TAG" --draft=false --latest=false
