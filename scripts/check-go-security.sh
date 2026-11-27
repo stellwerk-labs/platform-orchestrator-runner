@@ -21,7 +21,7 @@ case "${1:-source}" in
     unset GOOS GOARCH GOAMD64 GOARM64
     # Without a symbol table the scanner falls back to module-level matching and treats every symbol
     # of an affected module as linked; refuse a stripped executable instead of scanning it imprecisely.
-    go tool nm "$binary" >/dev/null
+    go tool nm "$binary" >/dev/null || { echo "refusing $binary: no symbol table (build with -w, never -s)" >&2; exit 1; }
     # Keep text mode: the scanner's JSON mode reports findings with exit zero.
     go run "$checker" -mode=binary "$binary"
     ;;
