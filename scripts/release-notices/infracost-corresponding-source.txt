@@ -1,9 +1,11 @@
 Infracost corresponding source
 
-corresponding-source.tar.gz preserves the complete tree emitted by the pinned
-Go licence collector for this executable's effective dependencies, including
-source required by reciprocal licences such as MPL-2.0. It includes the actual
-modified Terraform and TFLint source used in this build.
+corresponding-source.tar.gz preserves the tree emitted by the pinned Go licence
+collector for this executable's effective dependencies, including source
+required by reciprocal licences such as MPL-2.0. The collector's copies of
+testdata/ test fixture directories are left out; this build neither compiles
+nor embeds any of their files. It includes the actual modified Terraform and
+TFLint source used in this build.
 
 Extract into a new directory:
   mkdir corresponding-source

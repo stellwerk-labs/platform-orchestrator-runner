@@ -21,7 +21,7 @@
     "CHANGELOG.md": "41ddbbc2f2d7aea8781e13536a4db156ba124dcab1f5d3ce367490072a3a5372"
   },
   "correspondingSourceSHA256": {
-    "linux/amd64": "9e1d4968b4a728ef4ff4a17bf75fa6e11c1dc18b56a1a2fa0fb597ea0607e809",
-    "linux/arm64": "9e1d4968b4a728ef4ff4a17bf75fa6e11c1dc18b56a1a2fa0fb597ea0607e809"
+    "linux/amd64": "074d5f106a9d6951ea808ffbac19a965f91650373a089c5994601999e64fc8f6",
+    "linux/arm64": "074d5f106a9d6951ea808ffbac19a965f91650373a089c5994601999e64fc8f6"
   }
 }

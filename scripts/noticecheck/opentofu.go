@@ -21,7 +21,7 @@ const opentofuCompiler = "go1.27.4"
 const opentofuCommit = "c83e7e50daff10ac704cb0811e9ffd0ad2523759"
 const opentofuZIPHash = "57a1cb18f2a91f7a00be94648dbb77d1539e59e303433f2946afdd6707388637"
 const opentofuBuildHash = "1245f2205f5d4ad0ba2f6a761fe068e1b63168296b5eb8075eac511e646c20e9"
-const opentofuSourceHash = "b0334eb7d14e85bc635b919b23875a3a85f5c4177b2ffa522f68946e203c9447"
+const opentofuSourceHash = "eb956b5d0884862c0e5446df7c64b06176c1dd9661d69980cf44433d70a6bf62"
 
 type opentofuReceipt struct {
 	Version, UpstreamVersion, SourceCommit, ModuleSum, GoModSum, Compiler string

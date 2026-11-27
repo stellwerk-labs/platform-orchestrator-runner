@@ -15,7 +15,7 @@ import (
 
 const infracostCommit = "40ad0ac9f247d883884cd0f60057367b4af3df08"
 const infracostLicenseHash = "de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad"
-const infracostSourceHash = "7a854ae77ee8808799276da25952551093e7bd09d8ba7820caac06bff224dca3"
+const infracostSourceHash = "65cdfab6c69834f02123ec68a72c86bb260ab2bd6e029e034d122d98d34c0d1f"
 const infracostBuildVersion = "v0.10.49+stellwerk.1"
 const infracostModulePath = "github.com/infracost/infracost"
 

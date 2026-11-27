@@ -24,6 +24,7 @@ export PATH="$(dirname "$OPENTOFU_GO"):$work/bin:$PATH"
 export GOMODCACHE="$OPENTOFU_BUILD_DIR/modules" GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOFLAGS='-mod=readonly -p=1'
 ignore=github.com/opentofu/opentofu,github.com/jmespath/go-jmespath
 (cd "$OPENTOFU_BUILD_DIR/source"; go-licenses save ./cmd/tofu --ignore "$ignore" --save_path "$work/classified")
+find "$work/classified" -type d -name testdata -prune -exec rm -r -- {} +
 (cd "$OPENTOFU_BUILD_DIR/source"; go-licenses report ./cmd/tofu --ignore "$ignore") > "$output/licenses.csv"
 printf '%s\n' 'github.com/jmespath/go-jmespath,NOASSERTION,Apache-2.0' >> "$output/licenses.csv"
 (unset GOOS GOARCH GOAMD64 GOARM64 GOFLAGS; GOTOOLCHAIN=local "$checker_go" run -p=1 "$root/scripts/noticecheck" opentofu-archive "$work/classified" "$output/corresponding-source.tar.gz" "$OPENTOFU_BUILD_DIR" "$root")

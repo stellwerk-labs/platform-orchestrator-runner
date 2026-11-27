@@ -10,7 +10,7 @@ test -z "$(find "$bundle" -type l -print)"
 test "$(sha256sum "$bundle/opentofu/LICENSE" | cut -d ' ' -f 1)" = 142b957651baf401646dd7f3d855cb7c4f6f0921d645faa27e7cb540bc33cf4c
 test "$(sha256sum "$bundle/opentofu/dependencies/github.com/jmespath/go-jmespath/LICENSE" | cut -d ' ' -f 1)" = 03cfaf331a260694d06227a589cdd2b5fcfab474697b72e250736696c313655a
 test "$(sha256sum "$bundle/opentofu/dependencies/github.com/jmespath/go-jmespath/APACHE-2.0.txt" | cut -d ' ' -f 1)" = 1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40
-test "$(sha256sum "$bundle/opentofu/SOURCE.json" | cut -d ' ' -f 1)" = b0334eb7d14e85bc635b919b23875a3a85f5c4177b2ffa522f68946e203c9447
+test "$(sha256sum "$bundle/opentofu/SOURCE.json" | cut -d ' ' -f 1)" = eb956b5d0884862c0e5446df7c64b06176c1dd9661d69980cf44433d70a6bf62
 test "$(sha256sum "$bundle/opentofu/build/BUILD.json" | cut -d ' ' -f 1)" = 1245f2205f5d4ad0ba2f6a761fe068e1b63168296b5eb8075eac511e646c20e9
 test "$(sha256sum "${OPENTOFU_BINARY:-/usr/local/bin/tofu}" | cut -d ' ' -f 1)" = "$(cat "$bundle/opentofu/binary.sha256")"
 target="$(cat "$bundle/target.txt")"
@@ -20,9 +20,9 @@ printf '%s\n' "$expected_source" | grep -Eq '^[0-9a-f]{64}$'
 test "$(sha256sum "$bundle/opentofu/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = "$expected_source"
 test "$(sha256sum "$bundle/infracost/LICENSE" | cut -d ' ' -f 1)" = de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad
 test "$(sha256sum "${INFRACOST_BINARY:-/opt/runner/infracost}" | cut -d ' ' -f 1)" = "$(cat "$bundle/infracost/binary.sha256")"
-test "$(sha256sum "$bundle/infracost/SOURCE.json" | cut -d ' ' -f 1)" = 7a854ae77ee8808799276da25952551093e7bd09d8ba7820caac06bff224dca3
+test "$(sha256sum "$bundle/infracost/SOURCE.json" | cut -d ' ' -f 1)" = 65cdfab6c69834f02123ec68a72c86bb260ab2bd6e029e034d122d98d34c0d1f
 test "$(sha256sum "$bundle/infracost/build/PATCHES.json" | cut -d ' ' -f 1)" = 369159fab74b4b42282540507953838520dfab4e33d5f94bbfc99e5a9b3a971d
-test "$(sha256sum "$bundle/infracost/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = a0d7e145db8936607beb5ecf395fa04ab57807c5dce0d199aa2deca9cc1e0c80
+test "$(sha256sum "$bundle/infracost/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = 389fe24458907c795ca48a6e2bb6745db3013ff4ab33d03ece79f7cca87f3c73
 work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
 cd "$bundle"

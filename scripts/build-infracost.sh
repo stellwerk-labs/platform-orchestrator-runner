@@ -12,7 +12,8 @@ export GOMODCACHE="$(dirname "$source_dir")/modules"
 export GOOS=linux GOARCH="$architecture" GOAMD64=v1 GOARM64=v8.0
 unset GOFLAGS GOEXPERIMENT
 cd "$source_dir"
-# Symbol tables are required for accurate artifact vulnerability matching.
+# -w drops only DWARF. Never add -s: symbol tables are required for accurate
+# artifact vulnerability matching.
 "$go_binary" build -p=2 -mod=readonly -trimpath \
- -ldflags='-X github.com/infracost/infracost/internal/version.Version=v0.10.49+stellwerk.1' \
+ -ldflags='-w -X github.com/infracost/infracost/internal/version.Version=v0.10.49+stellwerk.1' \
  -o "$output" ./cmd/infracost

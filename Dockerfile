@@ -24,10 +24,11 @@ COPY . .
 RUN sh scripts/install-go-licenses.sh /usr/local/bin
 
 ARG TARGETARCH
+# -w drops only DWARF. Never add -s: check-go-security.sh binary needs symbols.
 RUN --mount=target=. \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOARCH="$TARGETARCH" go build -o /opt/runner/runner ./cmd/runner
+    GOARCH="$TARGETARCH" go build -trimpath -ldflags=-w -o /opt/runner/runner ./cmd/runner
 
 FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS tofu
 

@@ -56,3 +56,7 @@ A tool installed in a separate backend job is absent from the unit job that runs
 ### Prepare matched forward candidate metadata
 
 Release metadata is separate from qualification setup. Advance installation examples and paired chart/image versions together while retaining the customer-facing behavior and recovery guidance.
+
+## 2026-11-27: Corresponding-source hash chain
+
+No tool writes the corresponding-source receipts. After changing a collector, `build-opentofu.sh` or either `*-corresponding-source.txt`, run `collect-licenses.sh` once (it fails at the final `noticecheck` but leaves both tarballs), check that amd64 and arm64 hash the same, update `correspondingSourceSHA256` in both `SOURCE.json` receipts, then the receipt hashes in `noticecheck/{opentofu,infracost}.go` and `validate-notices.sh`, plus the Infracost tarball hash there. Reproduce the published hashes from the unchanged base first to prove the host matches CI. The notice scripts need `go` 1.26.11 as the entry toolchain, as in CI: a manually installed Go 1.27.4 first on `PATH` makes `GOTOOLCHAIN=go1.27.4 go env GOROOT` point outside the module cache and `prepare-opentofu.sh` fails with `OpenTofu toolchain authentication differs`.

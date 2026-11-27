@@ -15,7 +15,8 @@ export GOMODCACHE="$(dirname "$source_dir")/modules" GOOS=linux GOARCH="$archite
 case "$architecture" in amd64) export GOAMD64=v1 ;; arm64) export GOARM64=v8.0 ;; esac
 mkdir -p "$(dirname "$output")"
 cd "$source_dir"
-# Symbols are required by the binary scanner. This is not an official build.
+# -w drops only DWARF. Never add -s: symbols are required by the binary scanner.
+# This is not an official build.
 "$go_binary" build -p=1 -mod=readonly -trimpath -buildvcs=false \
- -ldflags='-X github.com/opentofu/opentofu/version.rawVersion=1.13.9-stellwerk.remediation.20261123.1 -X github.com/opentofu/opentofu/version.dev=no' \
+ -ldflags='-w -X github.com/opentofu/opentofu/version.rawVersion=1.13.9-stellwerk.remediation.20261123.1 -X github.com/opentofu/opentofu/version.dev=no' \
  -o "$output" ./cmd/tofu

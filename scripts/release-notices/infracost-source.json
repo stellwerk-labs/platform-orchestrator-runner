@@ -15,7 +15,7 @@
   "effectiveGoModSHA256": "42aa0ee0de2ffdc73a4ee31d434bf54334dd2128f71a3467927a5bba86d056a3",
   "effectiveGoSumSHA256": "75ee4e15802da83bf4ef651db3063767a4a8d28e28c09d2eab6298e259a5f48e",
   "correspondingSourceSHA256": {
-    "linux/amd64": "a0d7e145db8936607beb5ecf395fa04ab57807c5dce0d199aa2deca9cc1e0c80",
-    "linux/arm64": "a0d7e145db8936607beb5ecf395fa04ab57807c5dce0d199aa2deca9cc1e0c80"
+    "linux/amd64": "389fe24458907c795ca48a6e2bb6745db3013ff4ab33d03ece79f7cca87f3c73",
+    "linux/arm64": "389fe24458907c795ca48a6e2bb6745db3013ff4ab33d03ece79f7cca87f3c73"
   }
 }

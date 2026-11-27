@@ -62,6 +62,8 @@ done < "$work/unique"
 # Prefixes are limited to this repository and byte-verified, explicitly declared
 # modules. Dependencies of ignored packages remain checked by go-licenses.
 go-licenses save "$@" --ignore "$ignore" --save_path "$output"
+# Omit test fixtures: Go never builds testdata/, and no linked package embeds from it.
+find "$output" -type d -name testdata -prune -exec rm -r -- {} +
 mkdir -p "$output/application" "$output/go"
 cp "$root/LICENSE" "$output/application/LICENSE"
 goroot="$(go env GOROOT)"

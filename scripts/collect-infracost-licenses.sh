@@ -14,6 +14,7 @@ work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
 ignore=github.com/infracost/infracost,go.mozilla.org/gopgagent,github.com/jmespath/go-jmespath
 (cd "$INFRACOST_BUILD_DIR/source"; export PATH="$go_binary_dir:$PATH" GOTOOLCHAIN=local GOMODCACHE="$INFRACOST_BUILD_DIR/modules" GOFLAGS="-mod=readonly"; go-licenses save ./cmd/infracost --ignore "$ignore" --save_path "$work/classified")
+find "$work/classified" -type d -name testdata -prune -exec rm -r -- {} +
 (unset GOOS GOARCH GOAMD64 GOARM64; go run "$root/scripts/noticecheck" infracost-archive "$work/classified" "$output/corresponding-source.tar.gz")
 (cd "$INFRACOST_BUILD_DIR/source"; export PATH="$go_binary_dir:$PATH" GOTOOLCHAIN=local GOMODCACHE="$INFRACOST_BUILD_DIR/modules" GOFLAGS="-mod=readonly"; go-licenses report ./cmd/infracost --ignore "$ignore") > "$output/licenses.csv"
 printf '%s\n' 'go.mozilla.org/gopgagent,NOASSERTION,Apache-2.0' 'github.com/jmespath/go-jmespath,NOASSERTION,Apache-2.0' >> "$output/licenses.csv"
