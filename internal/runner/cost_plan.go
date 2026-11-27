@@ -16,8 +16,8 @@ import (
 
 const maxCostPlanBytes = 8 << 20
 const maxCostResources = 2000
-const infracostVersion = "v0.10.49"
-const infracostBuild = "v0.10.49+stellwerk.1"
+const infracostVersion = "v0.10.51"
+const infracostBuild = "v0.10.51+stellwerk.1"
 const infracostBinary = "/opt/runner/infracost"
 const infracostPricingEndpoint = "https://pricing.api.infracost.io"
 

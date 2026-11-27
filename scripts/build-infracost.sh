@@ -14,5 +14,5 @@ unset GOFLAGS GOEXPERIMENT
 cd "$source_dir"
 # Symbol tables are required for accurate artifact vulnerability matching.
 "$go_binary" build -p=2 -mod=readonly -trimpath \
- -ldflags='-X github.com/infracost/infracost/internal/version.Version=v0.10.49+stellwerk.1' \
+ -ldflags='-X github.com/infracost/infracost/internal/version.Version=v0.10.51+stellwerk.1' \
  -o "$output" ./cmd/infracost

@@ -194,7 +194,7 @@ class CandidateReleaseTests(unittest.TestCase):
 
     def test_integration_final_image_requires_actual_release_context(self):
         root = Path(__file__).parents[1]
-        for workflow, expected in (("ci.yaml", "v3.3.0"),
+        for workflow, expected in (("ci.yaml", "v3.3.1"),
                                    ("build-and-push.yaml", "${{ inputs.candidate_tag || github.ref_name }}")):
             text = (root / ".github/workflows" / workflow).read_text()
             jobs = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", text, re.M | re.S))
@@ -207,7 +207,7 @@ class CandidateReleaseTests(unittest.TestCase):
         environment = dict(os.environ)
         environment.pop("RELEASE_VERSION", None)
         command = ["make", "--no-print-directory", "-n", "-C", "integration-tests"]
-        for version in ("v3.3.0-rc.1", "v3.3.0"):
+        for version in ("v3.3.1-rc.1", "v3.3.1"):
             result = subprocess.run(command + ["build-platform-orchestrator-runner"], cwd=root,
                                     env=dict(environment, RELEASE_VERSION=version),
                                     capture_output=True, text=True, timeout=10)

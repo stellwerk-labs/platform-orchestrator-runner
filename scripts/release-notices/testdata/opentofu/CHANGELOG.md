@@ -1,6 +1,51 @@
 The v1.13.x release series is supported until **August 1 2027**.
 
-## 1.13.3 (Unreleased)
+## 1.13.11 (Unreleased)
+
+## 1.13.10
+
+SECURITY ADVISORIES:
+
+- Upgrade Go toolchain to 1.27.4 to address GO-2026-6859, an HTTP/1 server crash due to a MaxBytesReader header race. ([#4831](https://github.com/opentofu/opentofu/pull/4831))
+
+BUG FIXES:
+
+- Overriding resources for indexed modules now works correctly during `tofu test`. ([#4859](https://github.com/opentofu/opentofu/pull/4859))
+- Fix symbol libraries preventing plan when used in modules. ([#4816](https://github.com/opentofu/opentofu/pull/4816)
+- Fix symbol libraries crash when uninitialized. ([#4861](https://github.com/opentofu/opentofu/pull/4861))
+
+## 1.13.9
+
+BUG FIXES:
+
+- Fix local backend state persistence bug when the first apply crashes. ([#4811](https://github.com/opentofu/opentofu/pull/4811))
+
+## 1.13.8
+
+BUG FIXES:
+
+- The `-v` short option now again works as an alias for the `version` command and `--version` option, fixing an unintended regression in v1.13.0. ([#4769](https://github.com/opentofu/opentofu/pull/4769))
+- Fixed panic when provided invalid state encryption configuration. ([#4783](https://github.com/opentofu/opentofu/pull/4783))
+
+## 1.13.7
+
+This version was skipped due to issues in the release process.
+
+## 1.13.6
+
+This version was skipped due to issues in the release process.
+
+## 1.13.5
+
+This version was skipped due to issues in the release process.
+
+## 1.13.4
+
+This version was skipped due to issues in the release process.
+
+## 1.13.3
+
+This version was skipped due to issues in the release process.
 
 ## 1.13.2
 

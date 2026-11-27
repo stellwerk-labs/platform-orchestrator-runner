@@ -165,7 +165,7 @@ func check(bundle, root, arch string) error {
 		SourceURL    string            `json:"sourceURL"`
 		NoticeSHA256 map[string]string `json:"noticeSHA256"`
 	}
-	if json.Unmarshal(source, &vendor) != nil || vendor.Version != "1.13.2" || vendor.SourceCommit != "765062032c46cacab116b36d714db098b806dede" || vendor.SourceURL != "https://github.com/opentofu/opentofu/tree/"+vendor.SourceCommit || len(vendor.NoticeSHA256) != 3 {
+	if json.Unmarshal(source, &vendor) != nil || vendor.Version != "1.13.10" || vendor.SourceCommit != "4dcfb2efaaf7d3e95a92d1c10b7fd000e82bc51f" || vendor.SourceURL != "https://github.com/opentofu/opentofu/tree/"+vendor.SourceCommit || len(vendor.NoticeSHA256) != 3 {
 		return fmt.Errorf("invalid vendor source binding")
 	}
 	for _, name := range []string{"LICENSE", "README.md", "CHANGELOG.md"} {

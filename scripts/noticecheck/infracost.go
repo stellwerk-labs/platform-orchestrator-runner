@@ -13,10 +13,10 @@ import (
 	"strings"
 )
 
-const infracostCommit = "40ad0ac9f247d883884cd0f60057367b4af3df08"
+const infracostCommit = "aa7176706bc8fed866c8280213ca44cea70954f9"
 const infracostLicenseHash = "de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad"
-const infracostSourceHash = "e03529cfa4a1803cef8748fff0a15d65785dfe12917b3f0096042174afe5f81f"
-const infracostBuildVersion = "v0.10.49+stellwerk.1"
+const infracostSourceHash = "37c1d38e252d119b7b699a0dc5c84fb2c201d4e4c22666eaa94379e0a8c53edb"
+const infracostBuildVersion = "v0.10.51+stellwerk.1"
 const infracostModulePath = "github.com/infracost/infracost"
 
 type infracostModule struct {
@@ -67,7 +67,7 @@ func infracostTargetGraph(buildDir, arch string) ([]infracostPackage, error) {
 
 func infracostSourceFiles(source, buildDir, root string) (map[string][]byte, error) {
 	files := map[string][]byte{}
-	for name, want := range map[string]string{"LICENSE": infracostLicenseHash, "go.mod": "7af651dda192024bc02ea43a3c74928093f761bd749774425f928c71dbce35e7", "go.sum": "28dad663d9683a319fddd105025db5f75457e39db4108b80eb9e98d68ce8da93"} {
+	for name, want := range map[string]string{"LICENSE": infracostLicenseHash, "go.mod": "bfc5154a266ef8352f8d52b74f70e2faccb6f91948a217f99c2be760c669941a", "go.sum": "7fb8ff0fa4c9e35da38c0c6bccb400e13755dbf7e28406e0cf6a2089282e733a"} {
 		blob, err := regular(filepath.Join(source, name))
 		if err != nil || hash(blob) != want {
 			return nil, fmt.Errorf("infracost source pin differs")
@@ -355,10 +355,7 @@ func fillInfracostChecksums(module *infracostModule, sums map[string]string) {
 
 type infracostDeclaration struct{ Version, File, SHA256, SPDX string }
 
-var infracostDeclaredLicenses = map[string]infracostDeclaration{
-	"go.mozilla.org/gopgagent":        {"v0.0.0-20170926210634-4d7ea76ff71a", "gpgagent.go", "4b3b1c8db16faa3ccae3ff160fece31798b12da04388a203fa0fa8679ddd815e", "Apache-2.0"},
-	"github.com/jmespath/go-jmespath": {"v0.4.0", "LICENSE", "03cfaf331a260694d06227a589cdd2b5fcfab474697b72e250736696c313655a", "Apache-2.0"},
-}
+var infracostDeclaredLicenses = map[string]infracostDeclaration{}
 
 func infracostDeclaredSource(module *infracostModule) (infracostDeclaration, []byte, error) {
 	declaration, ok := infracostDeclaredLicenses[module.Path]
@@ -408,7 +405,7 @@ func collectInfracostDeclarations(packages []infracostPackage, files map[string]
 }
 func rejectInfracostIgnoreCollisions(modules map[string]*infracostModule) error {
 	for path := range modules {
-		for _, prefix := range []string{infracostModulePath, "go.mozilla.org/gopgagent", "github.com/jmespath/go-jmespath"} {
+		for _, prefix := range []string{infracostModulePath} {
 			if path != prefix && strings.HasPrefix(path, prefix) {
 				return fmt.Errorf("ignored licence prefix collides with another module")
 			}

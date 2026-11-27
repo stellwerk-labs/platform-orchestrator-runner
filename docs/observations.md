@@ -32,7 +32,7 @@ The parser accepts JSON plan format 1.2, validates a numeric semantic tool versi
 requires `errored=false`, rejects duplicate JSON keys and trailing/prefixed data,
 and rejects deferred changes, non-passing checks, imports and unsupported action
 combinations. Terraform must explicitly report `complete=true`. The tested OpenTofu
-1.10.0, bundled 1.13.2 and local 1.13.5 builds omit that field; completeness follows from successful unrestricted full
+1.10.0, 1.13.2, bundled 1.13.10 and local 1.13.5 builds omit that field; completeness follows from successful unrestricted full
 plan execution without deferred changes. Unknown formats or incomplete results
 produce failure, never a successful clean result.
 

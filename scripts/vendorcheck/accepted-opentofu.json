@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "releaseFamily": "v3.3.0",
-  "vendor": "official OpenTofu 1.13.2",
+  "releaseFamily": "v3.3.1",
+  "vendor": "official OpenTofu 1.13.10",
   "scanner": "govulncheck",
   "scannerVersion": "v1.9.0",
   "artifacts": {
     "amd64": {
-      "sha256": "949061cbb3c3d4558928ca9a459a5052b8c5e5545d17656f33316d2e3bc335f2",
-      "goVersion": "go1.27.3",
+      "sha256": "e9a8c4ba735bd4c25f4d53231bd68318e8a14039947c391df9e1eddb40973c8e",
+      "goVersion": "go1.27.4",
       "advisories": [
         "GO-2026-5932",
         "GO-2026-6179",
@@ -18,17 +18,18 @@
         "GO-2026-6611",
         "GO-2026-6612",
         "GO-2026-6617",
-        "GO-2026-6859",
         "GO-2026-6860",
         "GO-2026-6865",
-        "GO-2026-6866"
+        "GO-2026-6866",
+        "GO-2026-6974",
+        "GO-2026-6975"
       ],
-      "findingCount": 1563,
-      "findingsSHA256": "5f8e13d9d42dd50f98ceb36cad83a047487e8847419fa1e22d3a0172eb2525a6"
+      "findingCount": 1432,
+      "findingsSHA256": "6b31464e89d4c86c0a36af028c3d4b2ce051652d053127f0bbd7ee3ec84bc765"
     },
     "arm64": {
-      "sha256": "92fb091345bc9ba9339496663aac81bd9a3686969682d8142d4c08ce18d9b9a8",
-      "goVersion": "go1.27.3",
+      "sha256": "af360fed5b8f919f04c322c04583d7581aa6325ca2bb111b728093d99f0ae635",
+      "goVersion": "go1.27.4",
       "advisories": [
         "GO-2026-5932",
         "GO-2026-6179",
@@ -39,13 +40,14 @@
         "GO-2026-6611",
         "GO-2026-6612",
         "GO-2026-6617",
-        "GO-2026-6859",
         "GO-2026-6860",
         "GO-2026-6865",
-        "GO-2026-6866"
+        "GO-2026-6866",
+        "GO-2026-6974",
+        "GO-2026-6975"
       ],
-      "findingCount": 1563,
-      "findingsSHA256": "5f8e13d9d42dd50f98ceb36cad83a047487e8847419fa1e22d3a0172eb2525a6"
+      "findingCount": 1432,
+      "findingsSHA256": "6b31464e89d4c86c0a36af028c3d4b2ce051652d053127f0bbd7ee3ec84bc765"
     }
   }
 }

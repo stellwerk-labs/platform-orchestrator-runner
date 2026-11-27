@@ -8,12 +8,12 @@ for required in application/LICENSE go/LICENSE go/PATENTS modules.txt target.txt
 done
 test -z "$(find "$bundle" -type l -print)"
 test "$(sha256sum "$bundle/opentofu/LICENSE" | cut -d ' ' -f 1)" = 142b957651baf401646dd7f3d855cb7c4f6f0921d645faa27e7cb540bc33cf4c
-test "$(sha256sum "$bundle/opentofu/SOURCE.json" | cut -d ' ' -f 1)" = 224f71756dd0832e678cdbb950bdcfe7d2966c4e32d2a76e77bccd4c0180ba6c
+test "$(sha256sum "$bundle/opentofu/SOURCE.json" | cut -d ' ' -f 1)" = d9597c7f56434b3c4d8e364644b779e06eda53f8f1b4e226dc9fea3cadad513f
 test "$(sha256sum "$bundle/infracost/LICENSE" | cut -d ' ' -f 1)" = de34de041a08b4396b411d3c173132bbcafe902f90307cca5cc00aae00ae6bad
 test "$(sha256sum "${INFRACOST_BINARY:-/opt/runner/infracost}" | cut -d ' ' -f 1)" = "$(cat "$bundle/infracost/binary.sha256")"
-test "$(sha256sum "$bundle/infracost/SOURCE.json" | cut -d ' ' -f 1)" = e03529cfa4a1803cef8748fff0a15d65785dfe12917b3f0096042174afe5f81f
-test "$(sha256sum "$bundle/infracost/build/PATCHES.json" | cut -d ' ' -f 1)" = c75b4b058e2820aa2e90c40285280b7c0f6a48c994546b68fba7c00b53ff08ed
-test "$(sha256sum "$bundle/infracost/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = 95aaa49dd3e403c073d72357cd6a019490a534f234c70686cf91878eea2ad8e8
+test "$(sha256sum "$bundle/infracost/SOURCE.json" | cut -d ' ' -f 1)" = 37c1d38e252d119b7b699a0dc5c84fb2c201d4e4c22666eaa94379e0a8c53edb
+test "$(sha256sum "$bundle/infracost/build/PATCHES.json" | cut -d ' ' -f 1)" = f0c32a6d28351445a97781315900291060f18961733808c17f12bd826e5f2c7a
+test "$(sha256sum "$bundle/infracost/corresponding-source.tar.gz" | cut -d ' ' -f 1)" = e7d5f42c25cccd860110a1eb80fcc094d5e0b0058c2432e558814695a57b38b4
 work="$(mktemp -d)"
 trap 'rm -r -- "$work"' EXIT HUP INT TERM
 cd "$bundle"

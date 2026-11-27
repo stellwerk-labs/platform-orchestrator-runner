@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const infracostPatchHash = "c75b4b058e2820aa2e90c40285280b7c0f6a48c994546b68fba7c00b53ff08ed"
+const infracostPatchHash = "f0c32a6d28351445a97781315900291060f18961733808c17f12bd826e5f2c7a"
 
 type infracostPatch struct {
 	Module, Version, Path string

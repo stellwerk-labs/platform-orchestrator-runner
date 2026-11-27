@@ -26,3 +26,22 @@ See DECISIONS.md and LEARNINGS.md for the selected architecture and artifact les
 ## 2026-11-13: Public Runner source preparation
 
 Removed the private installation identifier from the 3.3.0 residual-risk disposition before public source qualification. The accepted version family, exact binaries, advisory inventory and unresolved applicability remain unchanged. No workflow or application behavior changed.
+
+## 2026-11-27: Stable Infracost v0.10.51 patch, local preparation
+
+Moved the pinned source, archive hash, build label and every receipt/validator hash to Infracost `v0.10.51`; regenerated the effective module inputs with `go get` only (x/crypto `v0.59.0`, websocket fix) and kept the 4 OpenPGP file patches unchanged.
+Both linux executables build and scan with zero findings at any level; the notice pipeline passes 7 tests and the real Infracost boundary tests pass against the new binary.
+See DECISIONS.md and LEARNINGS.md (2026-11-27).
+
+## 2026-11-27: Runner 3.3.1 OpenTofu 1.13.10, local preparation
+
+Moved the official engine pin, notice receipt, notice fixtures and state-version expectation to OpenTofu 1.13.10, verified against its signed `SHA256SUMS`.
+Scoped the vendor disposition, CI release argument and release tests to `v3.3.1`, captured the 1.13.10 scanner fixtures and wrote the 3.3.1 release and residual notes.
+The vendor digest now ignores the scanner's random module labels on package/symbol records; repeated live scans and repeated security/final builds are accepted deterministically.
+See DECISIONS.md and LEARNINGS.md (2026-11-27).
+
+## 2026-11-27: Chart 0.4.1 with Runner 3.3.1
+
+Bumped the chart to `0.4.1` with `appVersion` `v3.3.1` in the same change as the Runner patch, as `v3.2.0` and `chart-v0.4.0` shared one commit; the chart was still on `v3.2.0` because 3.3.0 shipped without a chart bump.
+Templates and values are unchanged since `chart-v0.4.0`; the chart README is hand-maintained (helm-docs output would drop the prose), so only its three version mentions moved.
+`chart-v0.4.1` is tagged on the merge commit after the `v3.3.1` image is published.

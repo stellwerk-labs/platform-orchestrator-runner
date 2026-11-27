@@ -1,8 +1,8 @@
 {
   "purpose": "Replace removed unmaintained OpenPGP imports with the existing maintained ProtonMail dependency; no estimator logic changes.",
-  "sourceCommit": "40ad0ac9f247d883884cd0f60057367b4af3df08",
-  "modSHA256": "7325e70ec3422201367775712882e112125164867cfa8f3c6d30573f1eac2aee",
-  "sumSHA256": "93baaaaf9c41ed875d366fc95b5159dbe6efddc80d3b9c5dca37944a55e95c00",
+  "sourceCommit": "aa7176706bc8fed866c8280213ca44cea70954f9",
+  "modSHA256": "4dde9e490e85ac5dbab6979a965f29c0981346946c404e611863daa5d8644895",
+  "sumSHA256": "6065e067a941f52fbb88fd01fc4630c317aa59c403ad1be19366020a093f114a",
   "files": [
     {
       "module": "github.com/google/go-github/v41",

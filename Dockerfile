@@ -10,7 +10,7 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL \
 RUN set -eu; \
     export GNUPGHOME="$(mktemp -d)"; \
     trap 'status=$?; trap - EXIT; gpgconf --homedir "$GNUPGHOME" --kill all || status=1; rm -rf "$GNUPGHOME" || status=1; exit "$status"' EXIT; \
-    ./install-opentofu.sh --install-method standalone --opentofu-version 1.13.2 \
+    ./install-opentofu.sh --install-method standalone --opentofu-version 1.13.10 \
     --gpg-key-id E3E6E43D84CB852EADB0051D0C0AF313E5FD9F80 \
     --install-path / --symlink-path -
 
