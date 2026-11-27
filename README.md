@@ -46,7 +46,7 @@ push a matching `chart-v<version>` tag. The release workflow builds the locked
 protected-side NATS dependency, packages the chart, and publishes it to
 `ghcr.io/stellwerk-labs/charts/platform-orchestrator-kubernetes-agent-runner`.
 
-Chart `0.4.0` selects Runner `v3.2.0` when `image.tag` is empty.
+Chart `0.4.1` selects Runner `v3.3.1` when `image.tag` is empty.
 Publish the chart after the matching stable Runner image has been qualified.
 Runner `v*.*.*` tags do not trigger the chart publisher.
 
