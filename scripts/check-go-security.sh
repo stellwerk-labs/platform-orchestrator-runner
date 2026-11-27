@@ -19,6 +19,9 @@ case "${1:-source}" in
     case "$2" in /*) binary="$2" ;; *) binary="$PWD/$2" ;; esac
     # Run the scanner on the build host while inspecting the target executable.
     unset GOOS GOARCH GOAMD64 GOARM64
+    # Without a symbol table the scanner falls back to module-level matching and treats every symbol
+    # of an affected module as linked; refuse a stripped executable instead of scanning it imprecisely.
+    go tool nm "$binary" >/dev/null
     # Keep text mode: the scanner's JSON mode reports findings with exit zero.
     go run "$checker" -mode=binary "$binary"
     ;;
